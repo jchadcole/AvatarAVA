@@ -41,7 +41,8 @@ npm start              # http://localhost:3000
 | `ANTHROPIC_API_KEY` | Claude brain and input classifier. In a Claude cloud environment, name it `AVA_ANTHROPIC_API_KEY` instead. |
 | `LIVEAVATAR_API_KEY` | Avatar sessions |
 | `DEEPGRAM_API_KEY` | Speech-to-text and the avatar's voice |
-| `LIVEAVATAR_SANDBOX` | `true` (default) uses free ~1 minute sessions with the sandbox avatar. Set `false` and `LIVEAVATAR_AVATAR_ID` for a real avatar. |
+| `LIVEAVATAR_SANDBOX` | `true` (default) uses free ~1 minute sessions with the sandbox avatar. Set `false` to use the show's own avatar. |
+| `LIVEAVATAR_AVATAR_ID` | Optional override for the show's `avatarId` |
 | `CLAUDE_MODEL`, `CLAUDE_EFFORT` | Defaults `claude-opus-5-5` at `low` effort for fast spoken replies |
 | `CLAUDE_CLASSIFIER_MODEL` | Model for the input safety classifier (default `claude-haiku-4-5`, chosen for speed) |
 | `SHOW` | Which folder under `shows/` to load (default `demo`) |
@@ -52,9 +53,19 @@ The kiosk server runs on the booth PC. Open it full screen in Chrome kiosk mode,
 
 Copy `shows/demo` to `shows/<your-show>` and edit:
 
-- `show.json`: names, greeting, suggested questions, product keyterms for speech recognition, blocked terms, competitors, idle timeout, strike limit, and every canned line.
+- `show.json`: the LiveAvatar `avatarId` (ignored in sandbox mode), names, greeting, suggested questions, product keyterms for speech recognition, blocked terms, competitors, idle timeout, strike limit, and every canned line.
 - `persona.md`: how the host speaks and stays in character. `{{avatarName}}`, `{{company}}`, `{{eventName}}` and `{{competitors}}` are filled in from `show.json`.
 - `knowledge.md`: the only facts the avatar may answer from. **The demo file is placeholder content.**
+
+## Using your own avatar
+
+Sandbox mode only allows LiveAvatar's sample avatar. To show your own host:
+
+1. In the LiveAvatar dashboard, create a custom avatar. An **image avatar** needs one photo of the person (no consent recording); a **video avatar** needs about two minutes of footage plus a consent recording from the person filmed. Use a photo or footage you have the rights to, and get branded clothing from your own brand team rather than generating logos.
+2. Copy the new avatar's ID into `"avatarId"` in `shows/<show>/show.json`.
+3. Set `LIVEAVATAR_SANDBOX=false` in `.env` and restart. The server log prints which avatar it is using.
+
+The avatar's voice always comes from Deepgram (`DEEPGRAM_TTS_MODEL`), so pick a voice that suits the person.
 
 ## Develop
 

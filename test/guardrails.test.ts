@@ -1,6 +1,6 @@
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { loadShow } from "../src/server/config.ts";
+import { loadShow, pickAvatarId, readEnv, SANDBOX_AVATAR_ID } from "../src/server/config.ts";
 import { precheck, quickScreen, screenOutput } from "../src/server/guardrails.ts";
 
 const show = loadShow(path.resolve("shows"), "demo");
@@ -63,4 +63,17 @@ describe("quickScreen", () => {
       expect(quickScreen(text)).toBeNull();
     },
   );
+});
+
+describe("pickAvatarId", () => {
+  it("always uses the sandbox avatar in sandbox mode", () => {
+    expect(pickAvatarId(readEnv({}), { avatarId: "custom" })).toBe(SANDBOX_AVATAR_ID);
+  });
+
+  it("uses the show's avatar in live mode, with the env var as an override", () => {
+    const live = readEnv({ LIVEAVATAR_SANDBOX: "false" });
+    expect(pickAvatarId(live, { avatarId: "custom" })).toBe("custom");
+    expect(pickAvatarId(readEnv({ LIVEAVATAR_SANDBOX: "false", LIVEAVATAR_AVATAR_ID: "env" }), { avatarId: "custom" })).toBe("env");
+    expect(() => pickAvatarId(live, { avatarId: "" })).toThrow(/avatarId/);
+  });
 });

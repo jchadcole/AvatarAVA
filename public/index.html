@@ -10,20 +10,25 @@
     <div id="staff-corner" aria-hidden="true"></div>
     <span id="sandbox" hidden>Sandbox: sessions end after about a minute</span>
 
-    <video id="avatar" autoplay playsinline></video>
+    <main id="stage">
+      <video id="avatar" autoplay playsinline></video>
 
-    <section id="attract" hidden>
-      <h1 id="attract-title">Meet our host</h1>
-      <p id="attract-sub"></p>
-      <button id="start">Start</button>
-    </section>
+      <aside id="panel">
+        <section id="attract" hidden>
+          <h1 id="attract-title">Meet our host</h1>
+          <p id="attract-sub"></p>
+          <button id="start">Start</button>
+        </section>
 
-    <section id="visit">
-      <div id="captions" aria-live="polite"></div>
-      <p id="status"></p>
-      <button id="talk">Hold to talk</button>
-      <div id="suggestions"></div>
-    </section>
+        <section id="visit">
+          <h2>Conversation</h2>
+          <div id="captions" aria-live="polite"></div>
+          <p id="status"></p>
+          <button id="talk">Hold to talk</button>
+          <div id="suggestions"></div>
+        </section>
+      </aside>
+    </main>
 
     <script type="module" src="app.js"></script>
   </body>

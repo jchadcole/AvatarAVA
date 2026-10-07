@@ -18,6 +18,8 @@ const ShowFile = z.object({
   eventName: z.string(),
   company: z.string(),
   avatarName: z.string(),
+  /** LiveAvatar avatar for this show (from the LiveAvatar dashboard). Ignored in sandbox mode. */
+  avatarId: z.string().optional(),
   language: z.string().default("en"),
   greeting: z.string(),
   suggestedQuestions: z.array(z.string()).default([]),
@@ -69,7 +71,8 @@ export interface Env {
   claudeEffort: "low" | "medium" | "high" | "xhigh" | "max";
   liveAvatarApiKey?: string;
   liveAvatarSandbox: boolean;
-  liveAvatarAvatarId: string;
+  /** LIVEAVATAR_AVATAR_ID, an override for the show's avatarId. */
+  liveAvatarAvatarId?: string;
   liveAvatarVideoQuality: "very_high" | "high" | "medium" | "low";
   deepgramApiKey?: string;
   deepgramSttModel: string;
@@ -99,10 +102,21 @@ export function readEnv(env: NodeJS.ProcessEnv = process.env): Env {
     claudeEffort: effort as Env["claudeEffort"],
     liveAvatarApiKey: env.LIVEAVATAR_API_KEY || undefined,
     liveAvatarSandbox: sandbox,
-    liveAvatarAvatarId: sandbox ? SANDBOX_AVATAR_ID : (env.LIVEAVATAR_AVATAR_ID ?? SANDBOX_AVATAR_ID),
+    liveAvatarAvatarId: env.LIVEAVATAR_AVATAR_ID || undefined,
     liveAvatarVideoQuality: quality as Env["liveAvatarVideoQuality"],
     deepgramApiKey: env.DEEPGRAM_API_KEY || undefined,
     deepgramSttModel: env.DEEPGRAM_STT_MODEL ?? "nova-3",
     deepgramTtsModel: env.DEEPGRAM_TTS_MODEL ?? "aura-2-thalia-en",
   };
+}
+
+/**
+ * Which avatar to start. Sandbox mode only allows the sandbox avatar; otherwise
+ * LIVEAVATAR_AVATAR_ID wins over the show's avatarId.
+ */
+export function pickAvatarId(env: Env, show: Pick<ShowConfig, "avatarId">): string {
+  if (env.liveAvatarSandbox) return SANDBOX_AVATAR_ID;
+  const id = env.liveAvatarAvatarId || show.avatarId;
+  if (!id) throw new Error('Live mode needs an avatar: set "avatarId" in show.json or LIVEAVATAR_AVATAR_ID.');
+  return id;
 }

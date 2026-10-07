@@ -3,6 +3,7 @@
   "eventName": "Demo Show",
   "company": "Acme Robotics",
   "avatarName": "Ava",
+  "avatarId": "",
   "language": "en",
   "greeting": "Hi, I'm Ava, Acme's digital host. Ask me anything about what we're showing today.",
   "suggestedQuestions": [

@@ -66,7 +66,9 @@ function showCaption(role: "visitor" | "avatar", text: string): void {
   line.className = role;
   line.textContent = text;
   captions.append(line);
-  while (captions.children.length > 4) captions.firstElementChild?.remove();
+  // The right-hand panel keeps the whole visit, scrolled to the newest line.
+  while (captions.children.length > 60) captions.firstElementChild?.remove();
+  captions.scrollTop = captions.scrollHeight;
 }
 
 // ---- Avatar session ----------------------------------------------------

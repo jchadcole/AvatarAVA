@@ -6,7 +6,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import express from "express";
 import { WebSocketServer } from "ws";
 import { ClaudeBrain } from "./brain.ts";
-import { loadShow, readEnv } from "./config.ts";
+import { loadShow, pickAvatarId, readEnv } from "./config.ts";
 import { Conversation, type ServerMessage } from "./conversation.ts";
 import { InputClassifier } from "./guardrails.ts";
 import { createLiteSessionToken } from "./liveavatar.ts";
@@ -19,6 +19,7 @@ const show = loadShow(path.join(root, "shows"), env.showName);
 
 if (!env.deepgramApiKey) throw new Error("DEEPGRAM_API_KEY is required for speech-to-text and text-to-speech.");
 if (!env.liveAvatarApiKey) throw new Error("LIVEAVATAR_API_KEY is required to start avatar sessions.");
+const avatarId = pickAvatarId(env, show);
 
 // AVA_ANTHROPIC_API_KEY works where the host reserves ANTHROPIC_API_KEY for itself
 // (Claude cloud environments do); otherwise the SDK reads ANTHROPIC_API_KEY.
@@ -47,7 +48,7 @@ app.post("/api/session", async (_req, res) => {
   try {
     const { sessionToken } = await createLiteSessionToken({
       apiKey: env.liveAvatarApiKey!,
-      avatarId: env.liveAvatarAvatarId,
+      avatarId,
       sandbox: env.liveAvatarSandbox,
       quality: env.liveAvatarVideoQuality,
     });
@@ -109,5 +110,5 @@ wss.on("connection", (socket) => {
 
 server.listen(env.port, () => {
   console.log(`${show.avatarName} kiosk for ${show.eventName} on http://localhost:${env.port}`);
-  console.log(`LiveAvatar ${env.liveAvatarSandbox ? "SANDBOX (free, ~1 minute sessions)" : "LIVE"} mode, model ${env.claudeModel}`);
+  console.log(`LiveAvatar ${env.liveAvatarSandbox ? "SANDBOX (free, ~1 minute sessions)" : "LIVE"} mode, avatar ${avatarId}, model ${env.claudeModel}`);
 });

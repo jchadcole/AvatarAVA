@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { RefusalError, type Brain, type Turn } from "./brain.ts";
 import type { CannedLineKey, ShowConfig } from "./config.ts";
-import { precheck, screenOutput, type InputLabel } from "./guardrails.ts";
+import { precheck, quickScreen, screenOutput, type InputLabel } from "./guardrails.ts";
 import type { LogEntry } from "./transcriptLog.ts";
 import type { Stt, SttSession, Tts } from "./voice.ts";
 
@@ -22,8 +22,8 @@ export interface ConversationDeps {
   log: { write(entry: LogEntry): void };
   send(message: ServerMessage): void;
   kioskId: string;
-  /** How long to wait for the input classifier before trusting the reply. */
-  classifierTimeoutMs?: number;
+  /** How long speech waits for the input classifier before it starts anyway. */
+  classifierGateMs?: number;
 }
 
 /** Placeholder kept in history instead of text the guardrails deflected. */
@@ -100,72 +100,84 @@ export class Conversation {
     this.misheard = 0;
     send({ type: "state", state: "thinking" });
 
-    // The classifier and the reply run at the same time. Nothing is spoken
-    // until the classifier answers, or until its timeout passes.
-    const label = withTimeout(
-      this.deps.classifier.classify(text, ac.signal).catch(() => "normal" as const),
-      this.deps.classifierTimeoutMs ?? 3000,
-      "normal" as const,
-    );
-    const reply = this.deps.brain.reply(this.history, text, ac.signal)[Symbol.asyncIterator]();
-    const first = reply.next(); // starts the Claude request now
-    first.catch(() => {}); // handled below; avoids an unhandled rejection if we deflect first
-
+    // The classifier and the reply start together. Speech waits for the
+    // classifier only briefly; after that the avatar starts talking and a late
+    // "abusive" or "injection" verdict cuts it off mid-reply.
+    let verdict: InputLabel | undefined = quickScreen(text) ?? undefined;
+    const flagged = () => verdict === "abusive" || verdict === "injection";
     const spoken: string[] = [];
-    let userTurn = text;
+    let classified: Promise<void> = Promise.resolve();
     try {
-      const verdict = await label;
-      if (ac.signal.aborted) return; // the visitor started talking again
-      if (verdict === "abusive" || verdict === "injection") {
-        ac.abort();
-        userTurn = DEFLECTED_TURN;
-        this.log({ role: "system", text: "input deflected", label: verdict });
-        if (verdict === "abusive") {
-          this.strikes++;
-          if (this.strikes >= show.maxStrikes) {
-            await this.sayLine(show.cannedLines.endSession);
-            this.endVisit("strikes");
-            return;
+      if (!flagged()) {
+        classified = this.deps.classifier.classify(text, ac.signal).then(
+          (label) => {
+            verdict = label;
+            if (flagged()) ac.abort();
+          },
+          () => {}, // a failed classification never blocks the reply
+        );
+        const reply = this.deps.brain.reply(this.history, text, ac.signal)[Symbol.asyncIterator]();
+        const first = reply.next(); // starts the Claude request now
+        first.catch(() => {}); // handled below; avoids an unhandled rejection if we deflect first
+        await raceTimeout(classified, this.deps.classifierGateMs ?? 800);
+        if (!flagged() && !ac.signal.aborted) {
+          for (let next = await first; !next.done; next = await reply.next()) {
+            if (ac.signal.aborted) break;
+            const sentence = next.value;
+            const screen = screenOutput(sentence, show);
+            if (!screen.ok) {
+              ac.abort();
+              this.log({ role: "system", text: sentence, label: `output_blocked: ${screen.reason}` });
+              spoken.push(await this.sayLine(show.cannedLines.safeFallback));
+              break;
+            }
+            const audio = await this.deps.tts.synthesize(sentence, ac.signal);
+            if (ac.signal.aborted) break;
+            this.speak(sentence, audio);
+            this.log({ role: "avatar", text: sentence, latencyMs: spoken.length ? undefined : Date.now() - startedAt });
+            spoken.push(sentence);
           }
-          spoken.push(await this.sayLine(show.cannedLines.deflectAbuse));
-        } else {
-          spoken.push(await this.sayLine(show.cannedLines.deflectInjection));
         }
-        return;
-      }
-      if (verdict === "off_topic") this.log({ role: "system", text: "off topic", label: verdict });
-
-      for (let next = await first; !next.done; next = await reply.next()) {
-        if (ac.signal.aborted) return;
-        const sentence = next.value;
-        const screen = screenOutput(sentence, show);
-        if (!screen.ok) {
-          ac.abort();
-          this.log({ role: "system", text: sentence, label: `output_blocked: ${screen.reason}` });
-          spoken.push(await this.sayLine(show.cannedLines.safeFallback));
-          return;
-        }
-        const audio = await this.deps.tts.synthesize(sentence, ac.signal);
-        if (ac.signal.aborted) return;
-        this.speak(sentence, audio);
-        if (spoken.length === 0) this.log({ role: "avatar", text: sentence, latencyMs: Date.now() - startedAt });
-        else this.log({ role: "avatar", text: sentence });
-        spoken.push(sentence);
       }
     } catch (err) {
-      if (ac.signal.aborted && !(err instanceof RefusalError)) return;
       if (err instanceof RefusalError) {
         this.log({ role: "system", text: "model refusal", label: "refusal" });
         spoken.push(await this.sayLine(show.cannedLines.safeFallback));
-      } else {
+      } else if (!ac.signal.aborted) {
         console.error("turn failed", err);
         this.log({ role: "system", text: String(err), label: "error" });
         spoken.push(await this.sayLine(show.cannedLines.error));
       }
-    } finally {
-      if (spoken.length) this.remember(userTurn, spoken.join(" "));
-      this.finishTurn(ac);
     }
+
+    // A short reply can finish before the classifier does. The avatar is still
+    // talking, so wait for the verdict here rather than let it go unchecked.
+    if (verdict === undefined && this.turn === ac && !ac.signal.aborted) await raceTimeout(classified, 5000);
+
+    // The classifier sets `verdict` from a callback, so read it fresh here.
+    const final = verdict as InputLabel | undefined;
+
+    // A barge-in replaced this turn: the new turn owns the conversation now.
+    if (this.turn !== ac) {
+      if (spoken.length) this.remember(text, spoken.join(" "));
+      return;
+    }
+    if (final === "off_topic") this.log({ role: "system", text: "off topic", label: final });
+    if (final === "abusive" || final === "injection") {
+      ac.abort();
+      if (spoken.length) send({ type: "interrupt" });
+      this.log({ role: "system", text: "input deflected", label: final });
+      if (final === "abusive" && ++this.strikes >= show.maxStrikes) {
+        await this.sayLine(show.cannedLines.endSession);
+        this.endVisit("strikes");
+        return;
+      }
+      const line = final === "abusive" ? show.cannedLines.deflectAbuse : show.cannedLines.deflectInjection;
+      this.remember(DEFLECTED_TURN, await this.sayLine(line));
+    } else if (spoken.length) {
+      this.remember(text, spoken.join(" "));
+    }
+    this.finishTurn(ac);
   }
 
   /** Ends the visit and wipes its memory, so the next visitor starts fresh. */
@@ -242,18 +254,10 @@ export class Conversation {
   }
 }
 
-function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
-  return new Promise((resolve) => {
-    const timer = setTimeout(() => resolve(fallback), ms);
-    promise.then(
-      (value) => {
-        clearTimeout(timer);
-        resolve(value);
-      },
-      () => {
-        clearTimeout(timer);
-        resolve(fallback);
-      },
-    );
-  });
+/** Waits for the promise, but never longer than `ms`. */
+function raceTimeout(promise: Promise<unknown>, ms: number): Promise<unknown> {
+  let timer: NodeJS.Timeout | undefined;
+  return Promise.race([promise, new Promise((resolve) => (timer = setTimeout(resolve, ms)))]).finally(() =>
+    clearTimeout(timer),
+  );
 }

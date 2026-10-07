@@ -22,7 +22,7 @@ LiveAvatar web SDK <--say(audio)--
 
 - **Face:** [LiveAvatar](https://www.liveavatar.com/) in LITE ("Avatar Only") mode. The server mints a session token with the API key; the browser only sees the token and uses `@heygen/liveavatar-web-sdk` to show the video and send our audio.
 - **Brain:** Claude, with the persona and booth knowledge in a cached system prompt (`shows/<show>/persona.md`, `knowledge.md`). Replies stream and are spoken sentence by sentence.
-- **Guardrails:** a local precheck, a Claude input classifier (`normal`, `off_topic`, `abusive`, `injection`) that runs in parallel with the reply and gates the first spoken sentence, a per-sentence output screen (blocked terms, competitors, prices, prompt leaks), canned deflection lines, a strike limit that ends the visit, and server-side model fallback on refusals.
+- **Guardrails:** a local precheck (empty, gibberish, too long) and an instant pattern screen for obvious rule-rewriting attempts; a Claude input classifier (`normal`, `off_topic`, `abusive`, `injection`) that starts with the reply, gets a short head start (800 ms), and can cut the avatar off mid-reply if it flags the input late; a per-sentence output screen (blocked terms, competitors, prices, prompt leaks); canned deflection lines; a strike limit that ends the visit; and server-side model fallback on refusals.
 - **Visits:** a visitor taps Start, talks with push-to-talk (button or spacebar) or taps a suggested question. Memory is wiped when the visit ends on idle, on repeated abuse, or on a staff reset (tap the top-left corner three times).
 - **Logs:** text-only transcripts with guardrail labels and first-sentence latency, one JSON line per event in `logs/YYYY-MM-DD.jsonl`. No audio or video is stored.
 
@@ -43,6 +43,7 @@ npm start              # http://localhost:3000
 | `DEEPGRAM_API_KEY` | Speech-to-text and the avatar's voice |
 | `LIVEAVATAR_SANDBOX` | `true` (default) uses free ~1 minute sessions with the sandbox avatar. Set `false` and `LIVEAVATAR_AVATAR_ID` for a real avatar. |
 | `CLAUDE_MODEL`, `CLAUDE_EFFORT` | Defaults `claude-opus-5-5` at `low` effort for fast spoken replies |
+| `CLAUDE_CLASSIFIER_MODEL` | Optional faster model for the input classifier (defaults to `CLAUDE_MODEL`) |
 | `SHOW` | Which folder under `shows/` to load (default `demo`) |
 
 The kiosk server runs on the booth PC. Open it full screen in Chrome kiosk mode, for example `chrome --kiosk --autoplay-policy=no-user-gesture-required http://localhost:3000`.

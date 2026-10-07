@@ -24,7 +24,7 @@ if (!env.liveAvatarApiKey) throw new Error("LIVEAVATAR_API_KEY is required to st
 // (Claude cloud environments do); otherwise the SDK reads ANTHROPIC_API_KEY.
 const client = new Anthropic({ apiKey: process.env.AVA_ANTHROPIC_API_KEY || undefined });
 const brain = new ClaudeBrain(client, env.claudeModel, env.claudeEffort, show);
-const classifier = new InputClassifier(client, env.claudeModel);
+const classifier = new InputClassifier(client, env.classifierModel);
 const tts = new DeepgramTts(env.deepgramApiKey, env.deepgramTtsModel);
 const stt = new DeepgramStt(env.deepgramApiKey, env.deepgramSttModel, show.language);
 const log = new TranscriptLog(path.resolve(root, env.logDir));

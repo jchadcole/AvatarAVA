@@ -64,6 +64,8 @@ export interface Env {
   showName: string;
   logDir: string;
   claudeModel: string;
+  /** Model for the input classifier; a faster model here cuts the wait before speech. */
+  classifierModel: string;
   claudeEffort: "low" | "medium" | "high" | "xhigh" | "max";
   liveAvatarApiKey?: string;
   liveAvatarSandbox: boolean;
@@ -92,7 +94,8 @@ export function readEnv(env: NodeJS.ProcessEnv = process.env): Env {
     kioskId: env.KIOSK_ID ?? "booth-1",
     showName: env.SHOW ?? "demo",
     logDir: env.LOG_DIR ?? "logs",
-    claudeModel: env.CLAUDE_MODEL ?? "claude-opus-5-5",
+    claudeModel: env.CLAUDE_MODEL || "claude-opus-5-5",
+    classifierModel: env.CLAUDE_CLASSIFIER_MODEL || env.CLAUDE_MODEL || "claude-opus-5-5",
     claudeEffort: effort as Env["claudeEffort"],
     liveAvatarApiKey: env.LIVEAVATAR_API_KEY || undefined,
     liveAvatarSandbox: sandbox,

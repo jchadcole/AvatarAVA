@@ -21,6 +21,20 @@ export function precheck(text: string, maxChars: number): PrecheckResult {
   return "ok";
 }
 
+/** Obvious attempts to rewrite the host's rules, caught instantly without a model call. */
+const INJECTION_PATTERNS = [
+  /\b(ignore|disregard|forget|override)\b.{0,40}\b(instructions|rules|prompt|guidelines|programming)\b/i,
+  /\bsystem prompt\b/i,
+  /\b(developer|dan|jailbreak|god|admin) mode\b/i,
+  /\byou are now\b/i,
+  /\bpretend (to be|you are|you're)\b/i,
+  /\b(repeat|reveal|print|show|tell me)\b.{0,30}\byour (instructions|prompt|rules)\b/i,
+];
+
+export function quickScreen(text: string): "injection" | null {
+  return INJECTION_PATTERNS.some((pattern) => pattern.test(text)) ? "injection" : null;
+}
+
 // Layer 2: a fast Claude classification that runs in parallel with the reply.
 
 export const InputLabel = z.enum(["normal", "off_topic", "abusive", "injection"]);

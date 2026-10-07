@@ -1,6 +1,8 @@
+import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { loadShow, pickAvatarId, readEnv, SANDBOX_AVATAR_ID } from "../src/server/config.ts";
+import { loadKnowledge, loadShow, pickAvatarId, readEnv, SANDBOX_AVATAR_ID } from "../src/server/config.ts";
 import { precheck, quickScreen, screenOutput } from "../src/server/guardrails.ts";
 
 const show = loadShow(path.resolve("shows"), "demo");
@@ -75,5 +77,21 @@ describe("pickAvatarId", () => {
     expect(pickAvatarId(live, { avatarId: "custom" })).toBe("custom");
     expect(pickAvatarId(readEnv({ LIVEAVATAR_SANDBOX: "false", LIVEAVATAR_AVATAR_ID: "env" }), { avatarId: "custom" })).toBe("env");
     expect(() => pickAvatarId(live, { avatarId: "" })).toThrow(/avatarId/);
+  });
+});
+
+describe("loadKnowledge", () => {
+  it("combines knowledge.md and the knowledge/ folder in name order, skipping other files", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "show-"));
+    fs.writeFileSync(path.join(dir, "knowledge.md"), "Main facts.");
+    fs.mkdirSync(path.join(dir, "knowledge"));
+    fs.writeFileSync(path.join(dir, "knowledge", "b-faq.txt"), "FAQ.");
+    fs.writeFileSync(path.join(dir, "knowledge", "a-products.md"), "Products.");
+    fs.writeFileSync(path.join(dir, "knowledge", "logo.png"), "");
+    const text = loadKnowledge(dir);
+    expect(text.indexOf("Main facts.")).toBeLessThan(text.indexOf("Products."));
+    expect(text.indexOf("Products.")).toBeLessThan(text.indexOf("FAQ."));
+    expect(text).toContain('<source name="knowledge/a-products.md">');
+    expect(text).not.toContain("logo.png");
   });
 });

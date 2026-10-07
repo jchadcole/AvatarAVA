@@ -44,7 +44,7 @@ export type ShowConfig = z.infer<typeof ShowFile> & {
   knowledge: string;
 };
 
-/** Loads shows/<name>/{show.json,persona.md,knowledge.md}. */
+/** Loads shows/<name>/{show.json,persona.md} plus its knowledge (see loadKnowledge). */
 export function loadShow(showsDir: string, name: string): ShowConfig {
   const dir = path.join(showsDir, name);
   const raw = JSON.parse(fs.readFileSync(path.join(dir, "show.json"), "utf8"));
@@ -58,8 +58,34 @@ export function loadShow(showsDir: string, name: string): ShowConfig {
   return {
     ...show,
     persona: fill(fs.readFileSync(path.join(dir, "persona.md"), "utf8")),
-    knowledge: fs.readFileSync(path.join(dir, "knowledge.md"), "utf8"),
+    knowledge: loadKnowledge(dir),
   };
+}
+
+/** Roughly 100k tokens; beyond this replies slow down and cost more. */
+const KNOWLEDGE_WARN_CHARS = 400_000;
+
+/**
+ * Booth knowledge is knowledge.md (if present) plus every .md and .txt file in
+ * the show's knowledge/ folder, in name order, each tagged with its file name.
+ */
+export function loadKnowledge(showDir: string): string {
+  const files: string[] = [];
+  if (fs.existsSync(path.join(showDir, "knowledge.md"))) files.push("knowledge.md");
+  const folder = path.join(showDir, "knowledge");
+  if (fs.existsSync(folder)) {
+    for (const name of fs.readdirSync(folder).sort()) {
+      if (/\.(md|txt)$/i.test(name)) files.push(path.join("knowledge", name));
+    }
+  }
+  if (!files.length) throw new Error(`No booth knowledge in ${showDir}: add knowledge.md or files in knowledge/.`);
+  const knowledge = files
+    .map((file) => `<source name="${file}">\n${fs.readFileSync(path.join(showDir, file), "utf8").trim()}\n</source>`)
+    .join("\n\n");
+  if (knowledge.length > KNOWLEDGE_WARN_CHARS) {
+    console.warn(`Booth knowledge is ${knowledge.length} characters; consider trimming it to the topics visitors ask about.`);
+  }
+  return knowledge;
 }
 
 export interface Env {

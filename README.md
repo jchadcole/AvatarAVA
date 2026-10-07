@@ -38,7 +38,7 @@ npm start              # http://localhost:3000
 
 | Variable | Purpose |
 | --- | --- |
-| `ANTHROPIC_API_KEY` | Claude brain and input classifier |
+| `ANTHROPIC_API_KEY` | Claude brain and input classifier. In a Claude cloud environment, name it `AVA_ANTHROPIC_API_KEY` instead. |
 | `LIVEAVATAR_API_KEY` | Avatar sessions |
 | `DEEPGRAM_API_KEY` | Speech-to-text and the avatar's voice |
 | `LIVEAVATAR_SANDBOX` | `true` (default) uses free ~1 minute sessions with the sandbox avatar. Set `false` and `LIVEAVATAR_AVATAR_ID` for a real avatar. |

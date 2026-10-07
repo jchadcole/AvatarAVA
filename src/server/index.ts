@@ -20,7 +20,9 @@ const show = loadShow(path.join(root, "shows"), env.showName);
 if (!env.deepgramApiKey) throw new Error("DEEPGRAM_API_KEY is required for speech-to-text and text-to-speech.");
 if (!env.liveAvatarApiKey) throw new Error("LIVEAVATAR_API_KEY is required to start avatar sessions.");
 
-const client = new Anthropic(); // reads ANTHROPIC_API_KEY
+// AVA_ANTHROPIC_API_KEY works where the host reserves ANTHROPIC_API_KEY for itself
+// (Claude cloud environments do); otherwise the SDK reads ANTHROPIC_API_KEY.
+const client = new Anthropic({ apiKey: process.env.AVA_ANTHROPIC_API_KEY || undefined });
 const brain = new ClaudeBrain(client, env.claudeModel, env.claudeEffort, show);
 const classifier = new InputClassifier(client, env.claudeModel);
 const tts = new DeepgramTts(env.deepgramApiKey, env.deepgramTtsModel);

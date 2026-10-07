@@ -95,7 +95,7 @@ export function readEnv(env: NodeJS.ProcessEnv = process.env): Env {
     showName: env.SHOW ?? "demo",
     logDir: env.LOG_DIR ?? "logs",
     claudeModel: env.CLAUDE_MODEL || "claude-opus-5-5",
-    classifierModel: env.CLAUDE_CLASSIFIER_MODEL || env.CLAUDE_MODEL || "claude-opus-5-5",
+    classifierModel: env.CLAUDE_CLASSIFIER_MODEL || "claude-haiku-4-5",
     claudeEffort: effort as Env["claudeEffort"],
     liveAvatarApiKey: env.LIVEAVATAR_API_KEY || undefined,
     liveAvatarSandbox: sandbox,

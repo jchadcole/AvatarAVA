@@ -67,7 +67,10 @@ export class InputClassifier {
         model: this.model,
         max_tokens: 1024,
         system: CLASSIFIER_PROMPT,
-        output_config: { effort: "low", format: zodOutputFormat(Classification) },
+        // Haiku 4.5 rejects the effort setting; newer models take it.
+        output_config: this.model.startsWith("claude-haiku-4-5")
+          ? { format: zodOutputFormat(Classification) }
+          : { effort: "low", format: zodOutputFormat(Classification) },
         messages: [{ role: "user", content: `<visitor_message>\n${text}\n</visitor_message>` }],
       },
       { signal },

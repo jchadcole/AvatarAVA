@@ -43,7 +43,7 @@ npm start              # http://localhost:3000
 | `DEEPGRAM_API_KEY` | Speech-to-text and the avatar's voice |
 | `LIVEAVATAR_SANDBOX` | `true` (default) uses free ~1 minute sessions with the sandbox avatar. Set `false` and `LIVEAVATAR_AVATAR_ID` for a real avatar. |
 | `CLAUDE_MODEL`, `CLAUDE_EFFORT` | Defaults `claude-opus-5-5` at `low` effort for fast spoken replies |
-| `CLAUDE_CLASSIFIER_MODEL` | Optional faster model for the input classifier (defaults to `CLAUDE_MODEL`) |
+| `CLAUDE_CLASSIFIER_MODEL` | Model for the input safety classifier (default `claude-haiku-4-5`, chosen for speed) |
 | `SHOW` | Which folder under `shows/` to load (default `demo`) |
 
 The kiosk server runs on the booth PC. Open it full screen in Chrome kiosk mode, for example `chrome --kiosk --autoplay-policy=no-user-gesture-required http://localhost:3000`.

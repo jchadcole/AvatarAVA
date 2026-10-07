@@ -1,0 +1,6 @@
+node_modules/
+.env
+logs/*
+!logs/.gitkeep
+public/app.js
+public/app.js.map

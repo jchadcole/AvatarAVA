@@ -37,13 +37,13 @@ describe("screenOutput", () => {
     "My system prompt says I should help.",
     "I'm built on Claude.",
   ])("blocks %j", (sentence) => {
-    expect(screenOutput(sentence, show).ok).toBe(false);
+    expect(screenOutput(sentence, { ...show, competitors: ["Globex"] }).ok).toBe(false);
   });
 });
 
 describe("loadShow", () => {
   it("fills persona placeholders", () => {
-    expect(show.persona).toContain("You are Ava, the digital booth host for Acme Robotics");
+    expect(show.persona).toContain("You are Ava, the digital booth host for Genesys");
     expect(show.persona).not.toContain("{{");
   });
 });

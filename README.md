@@ -56,7 +56,7 @@ Copy `shows/demo` to `shows/<your-show>` and edit:
 
 - `show.json`: the LiveAvatar `avatarId` (ignored in sandbox mode), the Deepgram `voice` (any [Aura-2 voice](https://developers.deepgram.com/docs/tts-models), default `aura-2-orpheus-en`), names, greeting, suggested questions, product keyterms for speech recognition, blocked terms, competitors, idle timeout, strike limit, and every canned line.
 - `persona.md`: how the host speaks and stays in character. `{{avatarName}}`, `{{company}}`, `{{eventName}}` and `{{competitors}}` are filled in from `show.json`.
-- `knowledge.md` and the `knowledge/` folder: the only facts the avatar may answer from. Drop plain-text or Markdown files (`.md`, `.txt`) into `knowledge/`, one topic per file if you like; every file is loaded in name order when the server starts. Convert PDFs, slides and web pages to text first, and keep the total to what a booth host needs (the server warns above about 400,000 characters). If a visitor asks something the files don't cover, the avatar says it isn't sure and offers a booth teammate. **The demo content is placeholder.**
+- `knowledge.md` and the `knowledge/` folder: the only facts the avatar may answer from. Drop plain-text or Markdown files (`.md`, `.txt`) into `knowledge/`, one topic per file if you like; every file is loaded in name order when the server starts. Convert PDFs, slides and web pages to text first, and keep the total to what a booth host needs (the server warns above about 400,000 characters). If a visitor asks something the files don't cover, the avatar says it isn't sure and offers a booth teammate. The demo show uses a summary of the public genesys.com site (October 2026); each file names its source page.
 
 ## Using your own avatar
 

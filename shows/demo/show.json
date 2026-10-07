@@ -4,6 +4,7 @@
   "company": "Acme Robotics",
   "avatarName": "Ava",
   "avatarId": "",
+  "voice": "aura-2-orpheus-en",
   "language": "en",
   "greeting": "Hi, I'm Ava, Acme's digital host. Ask me anything about what we're showing today.",
   "suggestedQuestions": [

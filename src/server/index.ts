@@ -26,7 +26,7 @@ const avatarId = pickAvatarId(env, show);
 const client = new Anthropic({ apiKey: process.env.AVA_ANTHROPIC_API_KEY || undefined });
 const brain = new ClaudeBrain(client, env.claudeModel, env.claudeEffort, show);
 const classifier = new InputClassifier(client, env.classifierModel);
-const tts = new DeepgramTts(env.deepgramApiKey, env.deepgramTtsModel);
+const tts = new DeepgramTts(env.deepgramApiKey, env.deepgramTtsModel || show.voice);
 const stt = new DeepgramStt(env.deepgramApiKey, env.deepgramSttModel, show.language);
 const log = new TranscriptLog(path.resolve(root, env.logDir));
 
@@ -110,5 +110,5 @@ wss.on("connection", (socket) => {
 
 server.listen(env.port, () => {
   console.log(`${show.avatarName} kiosk for ${show.eventName} on http://localhost:${env.port}`);
-  console.log(`LiveAvatar ${env.liveAvatarSandbox ? "SANDBOX (free, ~1 minute sessions)" : "LIVE"} mode, avatar ${avatarId}, model ${env.claudeModel}`);
+  console.log(`LiveAvatar ${env.liveAvatarSandbox ? "SANDBOX (free, ~1 minute sessions)" : "LIVE"} mode, avatar ${avatarId}, voice ${env.deepgramTtsModel || show.voice}, model ${env.claudeModel}`);
 });

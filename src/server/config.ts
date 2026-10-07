@@ -20,6 +20,8 @@ const ShowFile = z.object({
   avatarName: z.string(),
   /** LiveAvatar avatar for this show (from the LiveAvatar dashboard). Ignored in sandbox mode. */
   avatarId: z.string().optional(),
+  /** Deepgram Aura voice for the host, e.g. "aura-2-orpheus-en". */
+  voice: z.string().default("aura-2-orpheus-en"),
   language: z.string().default("en"),
   greeting: z.string(),
   suggestedQuestions: z.array(z.string()).default([]),
@@ -76,7 +78,8 @@ export interface Env {
   liveAvatarVideoQuality: "very_high" | "high" | "medium" | "low";
   deepgramApiKey?: string;
   deepgramSttModel: string;
-  deepgramTtsModel: string;
+  /** DEEPGRAM_TTS_MODEL, an override for the show's voice. */
+  deepgramTtsModel?: string;
 }
 
 /** The only avatar LiveAvatar allows in sandbox mode ("Wayne"). */
@@ -106,7 +109,7 @@ export function readEnv(env: NodeJS.ProcessEnv = process.env): Env {
     liveAvatarVideoQuality: quality as Env["liveAvatarVideoQuality"],
     deepgramApiKey: env.DEEPGRAM_API_KEY || undefined,
     deepgramSttModel: env.DEEPGRAM_STT_MODEL ?? "nova-3",
-    deepgramTtsModel: env.DEEPGRAM_TTS_MODEL ?? "aura-2-thalia-en",
+    deepgramTtsModel: env.DEEPGRAM_TTS_MODEL || undefined,
   };
 }
 

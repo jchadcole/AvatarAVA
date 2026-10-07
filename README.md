@@ -1,0 +1,71 @@
+# AvatarAva
+
+A trade-show booth demo where visitors talk to a realistic human avatar. This is the **pilot**: a hosted LiveAvatar face driven by our own speech-to-text, Claude brain, guardrails and voice, so the brain carries over unchanged when we move to a local MetaHuman build later.
+
+## How it works
+
+```
+Kiosk browser                        Kiosk server (Node)                     Cloud
+-------------                        -------------------                     -----
+Hold-to-talk mic  --PCM 16 kHz-->    Deepgram STT session      ------->      Deepgram
+                                     Conversation:
+                                       1. local precheck (empty, gibberish, too long)
+                                       2. Claude input classifier  --+   --> Claude
+                                       3. Claude reply, streamed     |       (in parallel)
+                                          sentence by sentence  <----+
+                                       4. output screen per sentence
+                                     Deepgram TTS (PCM 24 kHz) ------->      Deepgram
+LiveAvatar web SDK <--say(audio)--   
+  repeatAudio() ---------------------------------------------------->      LiveAvatar (LITE)
+  <video> <-- lip-synced avatar stream (LiveKit) <-------------------
+```
+
+- **Face:** [LiveAvatar](https://www.liveavatar.com/) in LITE ("Avatar Only") mode. The server mints a session token with the API key; the browser only sees the token and uses `@heygen/liveavatar-web-sdk` to show the video and send our audio.
+- **Brain:** Claude, with the persona and booth knowledge in a cached system prompt (`shows/<show>/persona.md`, `knowledge.md`). Replies stream and are spoken sentence by sentence.
+- **Guardrails:** a local precheck, a Claude input classifier (`normal`, `off_topic`, `abusive`, `injection`) that runs in parallel with the reply and gates the first spoken sentence, a per-sentence output screen (blocked terms, competitors, prices, prompt leaks), canned deflection lines, a strike limit that ends the visit, and server-side model fallback on refusals.
+- **Visits:** a visitor taps Start, talks with push-to-talk (button or spacebar) or taps a suggested question. Memory is wiped when the visit ends on idle, on repeated abuse, or on a staff reset (tap the top-left corner three times).
+- **Logs:** text-only transcripts with guardrail labels and first-sentence latency, one JSON line per event in `logs/YYYY-MM-DD.jsonl`. No audio or video is stored.
+
+## Run it
+
+Requires Node 20+ and Chrome on the kiosk.
+
+```bash
+npm install
+cp .env.example .env   # then fill in the three API keys
+npm start              # http://localhost:3000
+```
+
+| Variable | Purpose |
+| --- | --- |
+| `ANTHROPIC_API_KEY` | Claude brain and input classifier |
+| `LIVEAVATAR_API_KEY` | Avatar sessions |
+| `DEEPGRAM_API_KEY` | Speech-to-text and the avatar's voice |
+| `LIVEAVATAR_SANDBOX` | `true` (default) uses free ~1 minute sessions with the sandbox avatar. Set `false` and `LIVEAVATAR_AVATAR_ID` for a real avatar. |
+| `CLAUDE_MODEL`, `CLAUDE_EFFORT` | Defaults `claude-opus-5-5` at `low` effort for fast spoken replies |
+| `SHOW` | Which folder under `shows/` to load (default `demo`) |
+
+The kiosk server runs on the booth PC. Open it full screen in Chrome kiosk mode, for example `chrome --kiosk --autoplay-policy=no-user-gesture-required http://localhost:3000`.
+
+## Per-show content
+
+Copy `shows/demo` to `shows/<your-show>` and edit:
+
+- `show.json`: names, greeting, suggested questions, product keyterms for speech recognition, blocked terms, competitors, idle timeout, strike limit, and every canned line.
+- `persona.md`: how the host speaks and stays in character. `{{avatarName}}`, `{{company}}`, `{{eventName}}` and `{{competitors}}` are filled in from `show.json`.
+- `knowledge.md`: the only facts the avatar may answer from. **The demo file is placeholder content.**
+
+## Develop
+
+```bash
+npm test          # unit tests for chunking, guardrails and the conversation flow
+npm run typecheck
+npm run dev       # rebuilds the client, restarts the server on change
+```
+
+## Known gaps in this pilot
+
+- Not yet tested end to end against live LiveAvatar and Deepgram accounts. First thing to check: whether sentence-by-sentence `repeatAudio` calls queue cleanly on the avatar or need to be merged into one utterance.
+- Push-to-talk only; hands-free voice detection and camera-based presence come later.
+- No offline mode yet: if the network drops, the page shows a "taking a break" message.
+- No admin page or dashboard yet; content is edited in `shows/` and logs are JSONL files.

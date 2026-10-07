@@ -1,0 +1,159 @@
+:root {
+  --bg: #0d1117;
+  --ink: #f4f6f8;
+  --muted: #9aa4b2;
+  --accent: #2f81f7;
+  --panel: rgba(13, 17, 23, 0.72);
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--ink);
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+#avatar {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  background: var(--bg);
+}
+
+#staff-corner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 80px;
+  height: 80px;
+  z-index: 10;
+}
+
+#sandbox {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: #9a6700;
+  font-size: 14px;
+  z-index: 5;
+}
+
+#attract {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  text-align: center;
+  padding: 24px;
+}
+
+#attract h1 {
+  font-size: clamp(40px, 7vw, 96px);
+  margin: 0;
+}
+
+#attract p {
+  font-size: clamp(18px, 2.5vw, 32px);
+  color: var(--muted);
+  margin: 0;
+}
+
+button {
+  font: inherit;
+  color: var(--ink);
+  background: var(--accent);
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+#start {
+  margin-top: 24px;
+  font-size: 32px;
+  padding: 20px 64px;
+}
+
+#visit {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 24px 24px 40px;
+  background: linear-gradient(transparent, var(--panel) 30%);
+}
+
+body.in-visit #visit {
+  display: flex;
+}
+
+body.in-visit #attract {
+  display: none;
+}
+
+#captions {
+  width: min(900px, 100%);
+  min-height: 3em;
+  font-size: clamp(18px, 2.2vw, 28px);
+  line-height: 1.35;
+}
+
+#captions p {
+  margin: 4px 0;
+}
+
+#captions .visitor {
+  color: var(--muted);
+  font-style: italic;
+}
+
+#status {
+  margin: 0;
+  min-height: 1.4em;
+  color: var(--muted);
+  font-size: 20px;
+}
+
+#talk {
+  font-size: 28px;
+  padding: 24px 56px;
+  touch-action: none;
+}
+
+#talk.active {
+  background: #d1242f;
+  transform: scale(1.05);
+}
+
+#suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  width: min(1100px, 100%);
+}
+
+#suggestions button {
+  background: rgba(255, 255, 255, 0.12);
+  font-size: 18px;
+  padding: 12px 20px;
+}

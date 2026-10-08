@@ -42,7 +42,14 @@ export type ShowConfig = z.infer<typeof ShowFile> & {
   persona: string;
   /** Booth knowledge the avatar may answer from. */
   knowledge: string;
+  /** The same knowledge, one entry per file, for showing where an answer came from. */
+  knowledgeFiles: KnowledgeFile[];
 };
+
+export interface KnowledgeFile {
+  name: string;
+  text: string;
+}
 
 /** Loads shows/<name>/{show.json,persona.md} plus its knowledge (see loadKnowledge). */
 export function loadShow(showsDir: string, name: string): ShowConfig {
@@ -55,10 +62,12 @@ export function loadShow(showsDir: string, name: string): ShowConfig {
       .replaceAll("{{company}}", show.company)
       .replaceAll("{{eventName}}", show.eventName)
       .replaceAll("{{competitors}}", show.competitors.join(", ") || "none listed");
+  const knowledgeFiles = readKnowledgeFiles(dir);
   return {
     ...show,
     persona: fill(fs.readFileSync(path.join(dir, "persona.md"), "utf8")),
-    knowledge: loadKnowledge(dir),
+    knowledge: joinKnowledge(knowledgeFiles),
+    knowledgeFiles,
   };
 }
 
@@ -70,6 +79,10 @@ const KNOWLEDGE_WARN_CHARS = 400_000;
  * the show's knowledge/ folder, in name order, each tagged with its file name.
  */
 export function loadKnowledge(showDir: string): string {
+  return joinKnowledge(readKnowledgeFiles(showDir));
+}
+
+function readKnowledgeFiles(showDir: string): KnowledgeFile[] {
   const files: string[] = [];
   if (fs.existsSync(path.join(showDir, "knowledge.md"))) files.push("knowledge.md");
   const folder = path.join(showDir, "knowledge");
@@ -79,9 +92,11 @@ export function loadKnowledge(showDir: string): string {
     }
   }
   if (!files.length) throw new Error(`No booth knowledge in ${showDir}: add knowledge.md or files in knowledge/.`);
-  const knowledge = files
-    .map((file) => `<source name="${file}">\n${fs.readFileSync(path.join(showDir, file), "utf8").trim()}\n</source>`)
-    .join("\n\n");
+  return files.map((name) => ({ name, text: fs.readFileSync(path.join(showDir, name), "utf8").trim() }));
+}
+
+function joinKnowledge(files: KnowledgeFile[]): string {
+  const knowledge = files.map((f) => `<source name="${f.name}">\n${f.text}\n</source>`).join("\n\n");
   if (knowledge.length > KNOWLEDGE_WARN_CHARS) {
     console.warn(`Booth knowledge is ${knowledge.length} characters; consider trimming it to the topics visitors ask about.`);
   }
@@ -102,6 +117,11 @@ export interface Env {
   /** LIVEAVATAR_AVATAR_ID, an override for the show's avatarId. */
   liveAvatarAvatarId?: string;
   liveAvatarVideoQuality: "very_high" | "high" | "medium" | "low";
+  /**
+   * LIVEAVATAR_PREWARM: keep an avatar session open between visits so Start is
+   * instant. Uses credits the whole time the page is open; never in sandbox.
+   */
+  liveAvatarPrewarm: boolean;
   deepgramApiKey?: string;
   deepgramSttModel: string;
   /** DEEPGRAM_TTS_MODEL, an override for the show's voice. */
@@ -133,6 +153,7 @@ export function readEnv(env: NodeJS.ProcessEnv = process.env): Env {
     liveAvatarSandbox: sandbox,
     liveAvatarAvatarId: env.LIVEAVATAR_AVATAR_ID || undefined,
     liveAvatarVideoQuality: quality as Env["liveAvatarVideoQuality"],
+    liveAvatarPrewarm: !sandbox && (env.LIVEAVATAR_PREWARM ?? "").toLowerCase() === "true",
     deepgramApiKey: env.DEEPGRAM_API_KEY || undefined,
     deepgramSttModel: env.DEEPGRAM_STT_MODEL ?? "nova-3",
     deepgramTtsModel: env.DEEPGRAM_TTS_MODEL || undefined,

@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { RefusalError, type Brain, type Turn } from "./brain.ts";
 import type { CannedLineKey, ShowConfig } from "./config.ts";
 import { precheck, quickScreen, screenOutput, type InputLabel } from "./guardrails.ts";
+import type { Insight } from "./insights.ts";
 import type { LogEntry } from "./transcriptLog.ts";
 import type { Stt, SttSession, Tts } from "./voice.ts";
 
@@ -24,6 +25,12 @@ export interface ConversationDeps {
   kioskId: string;
   /** How long speech waits for the input classifier before it starts anyway. */
   classifierGateMs?: number;
+  /** Audio for fixed lines, shared across kiosks' conversations (see warmLines). */
+  lineAudio?: Map<string, Promise<Buffer>>;
+  /** Receives what the backstage screen shows. */
+  insight?(insight: Insight): void;
+  /** Names the knowledge files an answer most likely came from. */
+  sources?: { match(text: string): string[] };
 }
 
 /** Placeholder kept in history instead of text the guardrails deflected. */
@@ -42,11 +49,14 @@ export class Conversation {
   private turn: AbortController | null = null;
   private listening: SttSession | null = null;
   private idleTimer: NodeJS.Timeout | null = null;
-  private readonly lineAudio = new Map<string, Promise<Buffer>>();
+  private readonly lineAudio: Map<string, Promise<Buffer>>;
 
-  constructor(private readonly deps: ConversationDeps) {}
+  constructor(private readonly deps: ConversationDeps) {
+    this.lineAudio = deps.lineAudio ?? new Map();
+  }
 
   async greet(): Promise<void> {
+    this.insight({ type: "visit", event: "start" });
     await this.sayLine(this.deps.show.greeting);
     this.armIdleTimer();
   }
@@ -86,12 +96,14 @@ export class Conversation {
     if (text) {
       send({ type: "caption", role: "visitor", text });
       this.log({ role: "visitor", text });
+      this.insight({ type: "visitor", text });
     }
 
     const check = precheck(text, show.maxVisitorChars);
     if (check === "empty" || check === "gibberish") {
       this.misheard++;
       this.log({ role: "system", text: check, label: check });
+      this.insight({ type: "guard", stage: "precheck", label: check, acted: true });
       await this.sayLine(this.misheard >= 2 ? show.cannedLines.suggest : show.cannedLines.didNotCatch, ac);
       this.finishTurn(ac);
       return;
@@ -105,13 +117,20 @@ export class Conversation {
     // "abusive" or "injection" verdict cuts it off mid-reply.
     let verdict: InputLabel | undefined = quickScreen(text) ?? undefined;
     const flagged = () => verdict === "abusive" || verdict === "injection";
+    if (verdict) this.insight({ type: "guard", stage: "pattern", label: verdict, acted: flagged(), ms: 0 });
     const spoken: string[] = [];
+    let firstSentenceMs: number | undefined;
+    let canned = false;
     let classified: Promise<void> = Promise.resolve();
     try {
       if (!flagged()) {
+        const classifyStart = Date.now();
         classified = this.deps.classifier.classify(text, ac.signal).then(
           (label) => {
             verdict = label;
+            if (this.turn === ac) {
+              this.insight({ type: "guard", stage: "classifier", label, acted: flagged(), ms: Date.now() - classifyStart });
+            }
             if (flagged()) ac.abort();
           },
           () => {}, // a failed classification never blocks the reply
@@ -128,13 +147,16 @@ export class Conversation {
             if (!screen.ok) {
               ac.abort();
               this.log({ role: "system", text: sentence, label: `output_blocked: ${screen.reason}` });
+              this.insight({ type: "guard", stage: "output", label: screen.reason, acted: true });
+              canned = true;
               spoken.push(await this.sayLine(show.cannedLines.safeFallback));
               break;
             }
             const audio = await this.deps.tts.synthesize(sentence, ac.signal);
             if (ac.signal.aborted) break;
             this.speak(sentence, audio);
-            this.log({ role: "avatar", text: sentence, latencyMs: spoken.length ? undefined : Date.now() - startedAt });
+            if (!spoken.length) firstSentenceMs = Date.now() - startedAt;
+            this.log({ role: "avatar", text: sentence, latencyMs: spoken.length ? undefined : firstSentenceMs });
             spoken.push(sentence);
           }
         }
@@ -142,10 +164,13 @@ export class Conversation {
     } catch (err) {
       if (err instanceof RefusalError) {
         this.log({ role: "system", text: "model refusal", label: "refusal" });
+        this.insight({ type: "guard", stage: "model", label: "refusal", acted: true });
+        canned = true;
         spoken.push(await this.sayLine(show.cannedLines.safeFallback));
       } else if (!ac.signal.aborted) {
         console.error("turn failed", err);
         this.log({ role: "system", text: String(err), label: "error" });
+        canned = true;
         spoken.push(await this.sayLine(show.cannedLines.error));
       }
     }
@@ -168,14 +193,17 @@ export class Conversation {
       if (spoken.length) send({ type: "interrupt" });
       this.log({ role: "system", text: "input deflected", label: final });
       if (final === "abusive" && ++this.strikes >= show.maxStrikes) {
-        await this.sayLine(show.cannedLines.endSession);
+        this.answered(await this.sayLine(show.cannedLines.endSession), true, startedAt);
         this.endVisit("strikes");
         return;
       }
       const line = final === "abusive" ? show.cannedLines.deflectAbuse : show.cannedLines.deflectInjection;
-      this.remember(DEFLECTED_TURN, await this.sayLine(line));
+      const said = await this.sayLine(line);
+      this.remember(DEFLECTED_TURN, said);
+      this.answered(said, true, startedAt);
     } else if (spoken.length) {
       this.remember(text, spoken.join(" "));
+      this.answered(spoken.join(" "), canned, startedAt, firstSentenceMs);
     }
     this.finishTurn(ac);
   }
@@ -187,6 +215,7 @@ export class Conversation {
     this.listening?.close();
     this.listening = null;
     this.log({ role: "system", text: "visit ended", label: reason });
+    this.insight({ type: "visit", event: "end", reason });
     this.history = [];
     this.strikes = 0;
     this.misheard = 0;
@@ -249,9 +278,37 @@ export class Conversation {
     this.idleTimer = null;
   }
 
+  private answered(text: string, canned: boolean, startedAt: number, firstSentenceMs?: number): void {
+    const sources = canned ? [] : (this.deps.sources?.match(text) ?? []);
+    this.insight({ type: "answer", text, canned, firstSentenceMs, totalMs: Date.now() - startedAt, sources });
+  }
+
+  private insight(insight: Insight): void {
+    this.deps.insight?.(insight);
+  }
+
   private log(entry: Omit<LogEntry, "kiosk" | "visit">): void {
     this.deps.log.write({ kiosk: this.deps.kioskId, visit: this.visit, ...entry });
   }
+}
+
+/**
+ * Synthesizes the greeting and every canned line ahead of time, so the first
+ * visitor hears them without waiting on text-to-speech.
+ */
+export async function warmLines(show: ShowConfig, tts: Tts, cache: Map<string, Promise<Buffer>>): Promise<void> {
+  const lines = [show.greeting, ...Object.values(show.cannedLines)];
+  await Promise.all(
+    lines.map((text) => {
+      if (cache.has(text)) return cache.get(text);
+      const audio = tts.synthesize(text);
+      cache.set(text, audio);
+      return audio.catch((err) => {
+        cache.delete(text);
+        console.warn(`Could not pre-synthesize "${text}":`, err);
+      });
+    }),
+  );
 }
 
 /** Waits for the promise, but never longer than `ms`. */

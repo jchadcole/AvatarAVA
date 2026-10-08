@@ -202,3 +202,39 @@ body.in-visit #attract {
   font-size: 16px;
   padding: 12px 20px;
 }
+
+/* Listening cue: a pulsing ring around the avatar while the talk button is held. */
+@keyframes listening-pulse {
+  0%,
+  100% {
+    outline-color: rgba(47, 129, 247, 0.9);
+  }
+  50% {
+    outline-color: rgba(47, 129, 247, 0.35);
+  }
+}
+
+#avatar {
+  outline: 6px solid transparent;
+  outline-offset: -6px;
+  transition: outline-color 0.2s;
+}
+
+body[data-state="listening"] #avatar {
+  animation: listening-pulse 1.2s ease-in-out infinite;
+}
+
+/* Thinking: the status line breathes so a short pause reads as deliberate. */
+@keyframes thinking-fade {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+body[data-state="thinking"] #status {
+  animation: thinking-fade 1s ease-in-out infinite;
+}

@@ -9,6 +9,24 @@ describe("SentenceChunker", () => {
     expect(chunker.flush()).toEqual(["Want"]);
   });
 
+  it("lets a long first sentence start at a clause break, then goes back to whole sentences", () => {
+    const chunker = new SentenceChunker();
+    expect(chunker.push("Agent Copilot works right alongside your agents, surfacing knowledge")).toEqual([
+      "Agent Copilot works right alongside your agents,",
+    ]);
+    expect(chunker.push(" and next steps, live. Afterward, it writes the summary. ")).toEqual([
+      "surfacing knowledge and next steps, live.",
+      "Afterward, it writes the summary.",
+    ]);
+  });
+
+  it("keeps short openers and number commas whole", () => {
+    const chunker = new SentenceChunker();
+    expect(chunker.push("Sure, happy to help with that ")).toEqual([]);
+    expect(chunker.push("question about 2,500 seats. ")).toEqual(["Sure, happy to help with that question about 2,500 seats."]);
+    expect(new SentenceChunker(12, 0).push("Agent Copilot works right alongside your agents, surfacing")).toEqual([]);
+  });
+
   it("merges very short fragments into the next sentence", () => {
     const chunker = new SentenceChunker();
     expect(chunker.push("Yes. That works well for big warehouses. ")).toEqual([

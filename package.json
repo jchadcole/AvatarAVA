@@ -8,7 +8,7 @@
     "node": ">=20"
   },
   "scripts": {
-    "build:client": "esbuild src/client/main.ts --bundle --format=esm --target=es2022 --sourcemap --outfile=public/app.js",
+    "build:client": "esbuild src/client/main.ts --bundle --format=esm --target=es2022 --sourcemap --outfile=public/app.js && esbuild src/client/backstage.ts --bundle --format=esm --target=es2022 --sourcemap --outfile=public/backstage.js",
     "dev": "npm run build:client && tsx watch src/server/index.ts",
     "start": "npm run build:client && tsx src/server/index.ts",
     "test": "vitest run",

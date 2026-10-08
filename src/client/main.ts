@@ -18,6 +18,10 @@ const suggestions = $("suggestions");
 const sandboxBadge = $("sandbox");
 
 let session: LiveAvatarSession | null = null;
+/** With prewarm on, an avatar session already streaming, ready for the next visit. */
+let spare: LiveAvatarSession | null = null;
+let warming: Promise<void> | null = null;
+let prewarm = false;
 let socket: WebSocket;
 let mic: { context: AudioContext; stop(): void } | null = null;
 let talking = false;
@@ -44,6 +48,7 @@ function handle(message: ServerMessage): void {
       session?.interrupt();
       break;
     case "state":
+      document.body.dataset.state = message.state;
       statusLine.textContent = {
         idle: "Hold the button and ask me anything",
         listening: "Listening…",
@@ -73,21 +78,50 @@ function showCaption(role: "visitor" | "avatar", text: string): void {
 
 // ---- Avatar session ----------------------------------------------------
 
+async function openSession(): Promise<LiveAvatarSession> {
+  const res = await fetch("/api/session", { method: "POST" });
+  if (!res.ok) throw new Error(await res.text());
+  const { sessionToken } = await res.json();
+  // Mic audio goes to our server for speech-to-text, not into the avatar room.
+  const opened = new LiveAvatarSession(sessionToken, { autoKeepAlive: true, voiceChat: { defaultMuted: true } });
+  opened.on(SessionEvent.SESSION_STREAM_READY, () => opened.attach(video));
+  opened.on(SessionEvent.SESSION_DISCONNECTED, () => {
+    if (opened === session) void endVisit();
+    if (opened === spare) {
+      spare = null;
+      setTimeout(warmUp, 5000);
+    }
+  });
+  opened.on(AgentEventsEnum.AVATAR_SPEAK_ENDED, () => {
+    if (!talking) statusLine.textContent = "Hold the button and ask me anything";
+  });
+  await opened.start();
+  return opened;
+}
+
+/** Opens the next visit's avatar session in the background, when prewarm is on. */
+function warmUp(): void {
+  if (!prewarm || spare || warming) return;
+  warming = openSession()
+    .then((opened) => {
+      spare = opened;
+    })
+    .catch((err) => {
+      console.error("prewarm failed", err);
+      setTimeout(warmUp, 15000);
+    })
+    .finally(() => {
+      warming = null;
+    });
+}
+
 async function startVisit(): Promise<void> {
   startButton.disabled = true;
   statusLine.textContent = "Starting…";
   try {
-    const res = await fetch("/api/session", { method: "POST" });
-    if (!res.ok) throw new Error(await res.text());
-    const { sessionToken } = await res.json();
-    // Mic audio goes to our server for speech-to-text, not into the avatar room.
-    session = new LiveAvatarSession(sessionToken, { autoKeepAlive: true, voiceChat: { defaultMuted: true } });
-    session.on(SessionEvent.SESSION_STREAM_READY, () => session?.attach(video));
-    session.on(SessionEvent.SESSION_DISCONNECTED, () => void endVisit());
-    session.on(AgentEventsEnum.AVATAR_SPEAK_ENDED, () => {
-      if (!talking) statusLine.textContent = "Hold the button and ask me anything";
-    });
-    await session.start();
+    if (warming) await warming;
+    session = spare ?? (await openSession());
+    spare = null;
     document.body.classList.add("in-visit");
     send({ type: "start_visit" });
   } catch (err) {
@@ -103,9 +137,11 @@ async function endVisit(): Promise<void> {
   const ending = session;
   session = null;
   document.body.classList.remove("in-visit");
+  delete document.body.dataset.state;
   captions.replaceChildren();
   statusLine.textContent = "";
   await ending?.stop().catch(() => {});
+  warmUp();
 }
 
 // ---- Push-to-talk microphone -------------------------------------------
@@ -189,6 +225,7 @@ async function init(): Promise<void> {
   $("attract-title").textContent = `Meet ${showInfo.avatarName}`;
   $("attract-sub").textContent = `${showInfo.company}'s digital host. Tap to start a conversation.`;
   sandboxBadge.hidden = !showInfo.sandbox;
+  prewarm = Boolean(showInfo.prewarm);
   for (const question of showInfo.suggestedQuestions as string[]) {
     const button = document.createElement("button");
     button.textContent = question;
@@ -197,6 +234,7 @@ async function init(): Promise<void> {
   }
   attract.hidden = false;
   connect();
+  warmUp();
 }
 
 void init();

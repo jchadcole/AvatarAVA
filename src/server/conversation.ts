@@ -50,6 +50,8 @@ export class Conversation {
   private listening: SttSession | null = null;
   private idleTimer: NodeJS.Timeout | null = null;
   private readonly lineAudio: Map<string, Promise<Buffer>>;
+  /** Voices heard in the current turn, for the backstage screen. */
+  private turnVoices = new Set<string>();
 
   constructor(private readonly deps: ConversationDeps) {
     this.lineAudio = deps.lineAudio ?? new Map();
@@ -90,6 +92,7 @@ export class Conversation {
     this.clearIdleTimer();
     const ac = new AbortController();
     this.turn = ac;
+    this.turnVoices = new Set();
     const startedAt = Date.now();
 
     let text = rawText.trim();
@@ -245,6 +248,8 @@ export class Conversation {
   }
 
   private speak(text: string, audio: Buffer): void {
+    const voice = this.deps.tts.voiceOf?.(audio);
+    if (voice) this.turnVoices.add(voice);
     this.deps.send({ type: "state", state: "speaking" });
     this.deps.send({ type: "caption", role: "avatar", text });
     this.deps.send({ type: "say", text, audio: audio.toString("base64") });
@@ -280,7 +285,8 @@ export class Conversation {
 
   private answered(text: string, canned: boolean, startedAt: number, firstSentenceMs?: number): void {
     const sources = canned ? [] : (this.deps.sources?.match(text) ?? []);
-    this.insight({ type: "answer", text, canned, firstSentenceMs, totalMs: Date.now() - startedAt, sources });
+    const voices = [...this.turnVoices];
+    this.insight({ type: "answer", text, canned, firstSentenceMs, totalMs: Date.now() - startedAt, sources, voices });
   }
 
   private insight(insight: Insight): void {

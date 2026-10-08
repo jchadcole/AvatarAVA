@@ -15,7 +15,16 @@ export type Insight =
       acted: boolean;
       ms?: number;
     }
-  | { type: "answer"; text: string; canned: boolean; firstSentenceMs?: number; totalMs: number; sources: string[] };
+  | {
+      type: "answer";
+      text: string;
+      canned: boolean;
+      firstSentenceMs?: number;
+      totalMs: number;
+      sources: string[];
+      /** Voices that spoke this answer, e.g. ["ElevenLabs"] or ["Deepgram (backup)"]. Empty with one fixed voice. */
+      voices: string[];
+    };
 
 export type StampedInsight = Insight & { ts: string };
 

@@ -63,6 +63,20 @@ describe("FallbackTts", () => {
     expect(primary).toHaveBeenCalledTimes(3);
   });
 
+  it("labels each line with the voice that spoke it and keeps the failure reason", async () => {
+    quiet();
+    let fail = false;
+    const tts = new FallbackTts(
+      { synthesize: async () => (fail ? Promise.reject(new Error("401 invalid key")) : Buffer.from("premium")) },
+      { synthesize: async () => Buffer.from("backup") },
+      { primaryName: "ElevenLabs", backupName: "Deepgram" },
+    );
+    expect(tts.voiceOf(await tts.synthesize("a"))).toBe("ElevenLabs");
+    fail = true;
+    expect(tts.voiceOf(await tts.synthesize("b"))).toBe("Deepgram (backup)");
+    expect(tts.lastError).toContain("401 invalid key");
+  });
+
   it("does not fall back when the turn itself was cancelled", async () => {
     const ac = new AbortController();
     const tts = new FallbackTts(

@@ -31,18 +31,34 @@ const classifier = new InputClassifier(client, env.classifierModel);
 const deepgramVoice = env.deepgramTtsModel || show.voice;
 const elevenLabsVoice = env.elevenLabsVoiceId || show.elevenLabsVoiceId;
 const deepgramTts = new DeepgramTts(env.deepgramApiKey, deepgramVoice);
-const tts: Tts = env.elevenLabsApiKey
-  ? new FallbackTts(new ElevenLabsTts(env.elevenLabsApiKey, elevenLabsVoice, env.elevenLabsModel), deepgramTts)
-  : deepgramTts;
-const voiceName = env.elevenLabsApiKey
+const fallbackTts = env.elevenLabsApiKey
+  ? new FallbackTts(new ElevenLabsTts(env.elevenLabsApiKey, elevenLabsVoice, env.elevenLabsModel), deepgramTts, {
+      primaryName: "ElevenLabs",
+      backupName: "Deepgram",
+    })
+  : null;
+const tts: Tts = fallbackTts ?? deepgramTts;
+const voiceName = fallbackTts
   ? `ElevenLabs ${elevenLabsVoice} (${env.elevenLabsModel}), Deepgram ${deepgramVoice} as backup`
-  : `Deepgram ${deepgramVoice}`;
+  : `Deepgram ${deepgramVoice} only (no ELEVENLABS_API_KEY)`;
 const stt = new DeepgramStt(env.deepgramApiKey, env.deepgramSttModel, show.language);
 const log = new TranscriptLog(path.resolve(root, env.logDir));
 const insights = new InsightHub();
 const sources = new SourceMatcher(show.knowledgeFiles);
 const lineAudio = new Map<string, Promise<Buffer>>();
-void warmLines(show, tts, lineAudio);
+void warmLines(show, tts, lineAudio).then(async () => {
+  // Startup voice check: the greeting was just voiced, so say plainly which voice did it.
+  const greeting = await lineAudio.get(show.greeting)?.catch(() => undefined);
+  if (!fallbackTts) {
+    console.log(`VOICE CHECK: Deepgram ${deepgramVoice}. Add ELEVENLABS_API_KEY to .env for the ElevenLabs voice.`);
+  } else if (greeting && fallbackTts.voiceOf(greeting) === "ElevenLabs") {
+    console.log(`VOICE CHECK: ElevenLabs is working (voice ${elevenLabsVoice}, ${env.elevenLabsModel}).`);
+  } else {
+    console.warn(
+      `VOICE CHECK FAILED: ElevenLabs did not voice the greeting, so you will hear the Deepgram backup. Reason: ${fallbackTts.lastError ?? "unknown"}`,
+    );
+  }
+});
 
 const app = express();
 app.use(express.json());
@@ -56,6 +72,7 @@ app.get("/api/show", (_req, res) => {
     suggestedQuestions: show.suggestedQuestions,
     sandbox: env.liveAvatarSandbox,
     prewarm: env.liveAvatarPrewarm,
+    voice: voiceName,
   });
 });
 

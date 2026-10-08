@@ -3,6 +3,8 @@ import WebSocket from "ws";
 /** Text-to-speech that returns raw PCM 16-bit, 24 kHz, mono (what LiveAvatar expects). */
 export interface Tts {
   synthesize(text: string, signal?: AbortSignal): Promise<Buffer>;
+  /** Which voice produced this audio, when more than one may be in use. */
+  voiceOf?(audio: Buffer): string | undefined;
 }
 
 /** One push-to-talk utterance streamed to speech-to-text. */
@@ -76,12 +78,26 @@ export class ElevenLabsTts implements Tts {
 export class FallbackTts implements Tts {
   private failures = 0;
   private skipUntil = 0;
+  private readonly voices = new WeakMap<Buffer, string>();
+  /** Why the premium voice last failed, for the startup check. */
+  lastError: string | undefined;
 
   constructor(
     private readonly primary: Tts,
     private readonly backup: Tts,
-    private readonly opts: { timeoutMs?: number; maxFailures?: number; cooldownMs?: number; now?: () => number } = {},
+    private readonly opts: {
+      timeoutMs?: number;
+      maxFailures?: number;
+      cooldownMs?: number;
+      now?: () => number;
+      primaryName?: string;
+      backupName?: string;
+    } = {},
   ) {}
+
+  voiceOf(audio: Buffer): string | undefined {
+    return this.voices.get(audio);
+  }
 
   async synthesize(text: string, signal?: AbortSignal): Promise<Buffer> {
     const now = this.opts.now ?? Date.now;
@@ -90,10 +106,12 @@ export class FallbackTts implements Tts {
       try {
         const audio = await this.primary.synthesize(text, signal ? AbortSignal.any([signal, timeout]) : timeout);
         this.failures = 0;
+        this.voices.set(audio, this.opts.primaryName ?? "premium");
         return audio;
       } catch (err) {
         if (signal?.aborted) throw err;
-        console.warn("Premium voice failed; using the backup voice for this line.", err);
+        this.lastError = timeout.aborted ? `no audio within ${this.opts.timeoutMs ?? 4000} ms` : String(err);
+        console.warn(`Premium voice failed (${this.lastError}); using the backup voice for this line.`);
         if (++this.failures >= (this.opts.maxFailures ?? 3)) {
           this.skipUntil = now() + (this.opts.cooldownMs ?? 60_000);
           this.failures = 0;
@@ -101,7 +119,9 @@ export class FallbackTts implements Tts {
         }
       }
     }
-    return this.backup.synthesize(text, signal);
+    const audio = await this.backup.synthesize(text, signal);
+    this.voices.set(audio, `${this.opts.backupName ?? "backup"} (backup)`);
+    return audio;
   }
 }
 

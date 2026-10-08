@@ -48,6 +48,14 @@ h1 {
   font-size: clamp(14px, 1.2vw, 20px);
 }
 
+#badges {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+#voice-badge,
 #connection {
   padding: 6px 12px;
   border-radius: 999px;
@@ -167,6 +175,10 @@ h1 {
 .meta {
   color: var(--muted);
   font-size: 0.8em;
+}
+
+.meta .backup-voice {
+  color: var(--warn);
 }
 
 .divider {

@@ -93,6 +93,9 @@ function render(insight: StampedInsight): void {
           ),
         );
       }
+      for (const voice of insight.voices) {
+        meta.append(element("span", voice.includes("backup") ? "backup-voice" : "", `Voice: ${voice}`));
+      }
       if (insight.firstSentenceMs !== undefined) {
         totals.latencies.push(insight.firstSentenceMs);
         meta.append(element("span", "", `First sentence ready in ${seconds(insight.firstSentenceMs)}`));
@@ -134,3 +137,11 @@ function connect(): void {
 }
 
 connect();
+void fetch("/api/show")
+  .then((res) => res.json())
+  .then((info: { voice?: string }) => {
+    const badge = $("voice-badge");
+    if (!info.voice) return;
+    badge.textContent = `Voice: ${info.voice}`;
+    badge.hidden = false;
+  });

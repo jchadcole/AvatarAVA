@@ -175,6 +175,7 @@ describe("Conversation", () => {
         text: "The Model X scans shelves overnight. Want to see a demo?",
         canned: false,
         sources: ["knowledge/02-genesys-cloud.md"],
+        voices: [],
       });
       expect((insights[2] as { firstSentenceMs?: number }).firstSentenceMs).toBeGreaterThanOrEqual(0);
       conversation.dispose();

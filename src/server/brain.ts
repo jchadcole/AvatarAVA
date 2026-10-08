@@ -13,6 +13,12 @@ export class RefusalError extends Error {
 /** Streams the avatar's spoken reply, one sentence at a time. */
 export interface Brain {
   reply(history: Turn[], visitorText: string, signal: AbortSignal): AsyncIterable<string>;
+  /** True when questions must pass the input classifier before they reach this brain. */
+  readonly screenFirst?: boolean;
+  /** Which brain answered the last turn, when more than one can. */
+  readonly lastAnsweredBy?: string;
+  /** The visitor left; forget anything kept for them. */
+  endVisit?(): void;
 }
 
 export class ClaudeBrain implements Brain {

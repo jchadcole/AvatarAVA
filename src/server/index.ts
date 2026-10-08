@@ -5,9 +5,10 @@ import { fileURLToPath } from "node:url";
 import Anthropic from "@anthropic-ai/sdk";
 import express from "express";
 import { WebSocketServer } from "ws";
-import { ClaudeBrain } from "./brain.ts";
-import { loadShow, pickAvatarId, readEnv } from "./config.ts";
+import { ClaudeBrain, type Brain } from "./brain.ts";
+import { loadShow, pickAvatarId, pickGenesys, readEnv } from "./config.ts";
 import { Conversation, warmLines, type ServerMessage } from "./conversation.ts";
+import { FallbackBrain, GenesysBrain, webMessagingUrl } from "./genesys.ts";
 import { InputClassifier } from "./guardrails.ts";
 import { InsightHub } from "./insights.ts";
 import { createLiteSessionToken } from "./liveavatar.ts";
@@ -26,7 +27,22 @@ const avatarId = pickAvatarId(env, show);
 // AVA_ANTHROPIC_API_KEY works where the host reserves ANTHROPIC_API_KEY for itself
 // (Claude cloud environments do); otherwise the SDK reads ANTHROPIC_API_KEY.
 const client = new Anthropic({ apiKey: process.env.AVA_ANTHROPIC_API_KEY || undefined });
-const brain = new ClaudeBrain(client, env.claudeModel, env.claudeEffort, show);
+const claude = new ClaudeBrain(client, env.claudeModel, env.claudeEffort, show);
+const genesys = pickGenesys(env, show);
+/** Claude is shared by every kiosk; a Genesys AVA keeps one chat per kiosk, so each kiosk gets its own. */
+const makeBrain = (): Brain =>
+  genesys
+    ? new FallbackBrain(
+        new GenesysBrain({ ...genesys, origin: genesys.origin || undefined }),
+        claude,
+        "Claude",
+      )
+    : claude;
+console.log(
+  genesys
+    ? `BRAIN: Genesys AVA via ${webMessagingUrl(genesys.region, genesys.deploymentId)}, Claude answers if it fails or takes over ${genesys.replyTimeoutMs} ms.`
+    : `BRAIN: Claude ${env.claudeModel}.`,
+);
 const classifier = new InputClassifier(client, env.classifierModel);
 const deepgramVoice = env.deepgramTtsModel || show.voice;
 const elevenLabsVoice = env.elevenLabsVoiceId || show.elevenLabsVoiceId;
@@ -126,7 +142,7 @@ wss.on("connection", (socket) => {
   };
   const conversation = new Conversation({
     show,
-    brain,
+    brain: makeBrain(),
     classifier,
     tts,
     stt,

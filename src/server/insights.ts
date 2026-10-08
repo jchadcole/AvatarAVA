@@ -24,6 +24,8 @@ export type Insight =
       sources: string[];
       /** Voices that spoke this answer, e.g. ["ElevenLabs"] or ["Deepgram (backup)"]. Empty with one fixed voice. */
       voices: string[];
+      /** Which brain answered when more than one can, e.g. "Genesys AVA" or "Claude (backup)". */
+      brain?: string;
     };
 
 export type StampedInsight = Insight & { ts: string };

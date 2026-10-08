@@ -25,6 +25,22 @@ const ShowFile = z.object({
   /** ElevenLabs voice ID for the host; used when ELEVENLABS_API_KEY is set. Default: "Brian". */
   elevenLabsVoiceId: z.string().default("nPczCjzI2devNBz1zQrb"),
   language: z.string().default("en"),
+  /** Who writes the answers: "claude" (default) or "genesys" (a Genesys AVA, with Claude as backup). */
+  brain: z.enum(["claude", "genesys"]).default("claude"),
+  /** Genesys Web Messaging deployment that reaches the AVA; used when brain is "genesys". */
+  genesys: z
+    .object({
+      /** Org region domain, e.g. "mypurecloud.com" or "usw2.pure.cloud". */
+      region: z.string().default(""),
+      deploymentId: z.string().default(""),
+      /** Origin header to send when the deployment restricts domains, e.g. "https://booth.example.com". */
+      origin: z.string().default(""),
+      /** Claude answers the turn if the AVA has not started answering by then. */
+      replyTimeoutMs: z.number().int().positive().default(7000),
+      /** The AVA's reply counts as finished after this long with no new message. */
+      quietMs: z.number().int().positive().default(800),
+    })
+    .default({ region: "", deploymentId: "", origin: "", replyTimeoutMs: 7000, quietMs: 800 }),
   greeting: z.string(),
   suggestedQuestions: z.array(z.string()).default([]),
   keyterms: z.array(z.string()).default([]),
@@ -133,6 +149,11 @@ export interface Env {
   /** ELEVENLABS_VOICE_ID, an override for the show's elevenLabsVoiceId. */
   elevenLabsVoiceId?: string;
   elevenLabsModel: string;
+  /** AVA_BRAIN: overrides the show's brain ("claude" or "genesys"). */
+  brain?: "claude" | "genesys";
+  /** GENESYS_REGION and GENESYS_DEPLOYMENT_ID: override the show's genesys settings. */
+  genesysRegion?: string;
+  genesysDeploymentId?: string;
 }
 
 /** The only avatar LiveAvatar allows in sandbox mode ("Wayne"). */
@@ -146,6 +167,10 @@ export function readEnv(env: NodeJS.ProcessEnv = process.env): Env {
   const quality = env.LIVEAVATAR_VIDEO_QUALITY ?? "high";
   if (!["very_high", "high", "medium", "low"].includes(quality)) {
     throw new Error(`LIVEAVATAR_VIDEO_QUALITY must be very_high, high, medium or low (got "${quality}")`);
+  }
+  const brain = env.AVA_BRAIN?.toLowerCase() || undefined;
+  if (brain && brain !== "claude" && brain !== "genesys") {
+    throw new Error(`AVA_BRAIN must be claude or genesys (got "${env.AVA_BRAIN}")`);
   }
   const sandbox = (env.LIVEAVATAR_SANDBOX ?? "true").toLowerCase() !== "false";
   return {
@@ -167,6 +192,9 @@ export function readEnv(env: NodeJS.ProcessEnv = process.env): Env {
     elevenLabsApiKey: env.ELEVENLABS_API_KEY || undefined,
     elevenLabsVoiceId: env.ELEVENLABS_VOICE_ID || undefined,
     elevenLabsModel: env.ELEVENLABS_MODEL || "eleven_flash_v2_5",
+    brain: brain as Env["brain"],
+    genesysRegion: env.GENESYS_REGION || undefined,
+    genesysDeploymentId: env.GENESYS_DEPLOYMENT_ID || undefined,
   };
 }
 
@@ -179,4 +207,23 @@ export function pickAvatarId(env: Env, show: Pick<ShowConfig, "avatarId">): stri
   const id = env.liveAvatarAvatarId || show.avatarId;
   if (!id) throw new Error('Live mode needs an avatar: set "avatarId" in show.json or LIVEAVATAR_AVATAR_ID.');
   return id;
+}
+
+/**
+ * The Genesys settings to use, or null when the show answers with Claude.
+ * Environment variables win over show.json.
+ */
+export function pickGenesys(env: Env, show: Pick<ShowConfig, "brain" | "genesys">): ShowConfig["genesys"] | null {
+  if ((env.brain ?? show.brain) !== "genesys") return null;
+  const settings = {
+    ...show.genesys,
+    region: env.genesysRegion || show.genesys.region,
+    deploymentId: env.genesysDeploymentId || show.genesys.deploymentId,
+  };
+  if (!settings.region || !settings.deploymentId) {
+    throw new Error(
+      'The Genesys brain needs a region and deploymentId: set "genesys" in show.json or GENESYS_REGION and GENESYS_DEPLOYMENT_ID.',
+    );
+  }
+  return settings;
 }

@@ -93,6 +93,9 @@ function render(insight: StampedInsight): void {
           ),
         );
       }
+      if (insight.brain) {
+        meta.append(element("span", insight.brain.includes("backup") ? "backup-voice" : "", `Brain: ${insight.brain}`));
+      }
       for (const voice of insight.voices) {
         meta.append(element("span", voice.includes("backup") ? "backup-voice" : "", `Voice: ${voice}`));
       }

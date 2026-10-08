@@ -25,6 +25,8 @@ export interface ConversationDeps {
   kioskId: string;
   /** How long speech waits for the input classifier before it starts anyway. */
   classifierGateMs?: number;
+  /** For brains that need screened questions: the longest wait for the classifier. */
+  screenFirstMaxMs?: number;
   /** Audio for fixed lines, shared across kiosks' conversations (see warmLines). */
   lineAudio?: Map<string, Promise<Buffer>>;
   /** Receives what the backstage screen shows. */
@@ -138,11 +140,14 @@ export class Conversation {
           },
           () => {}, // a failed classification never blocks the reply
         );
+        // A brain outside our control (Genesys) only sees questions the
+        // classifier has passed; Claude starts at once and can be cut off late.
+        if (this.deps.brain.screenFirst) await raceTimeout(classified, this.deps.screenFirstMaxMs ?? 4000);
         const reply = this.deps.brain.reply(this.history, text, ac.signal)[Symbol.asyncIterator]();
-        const first = reply.next(); // starts the Claude request now
-        first.catch(() => {}); // handled below; avoids an unhandled rejection if we deflect first
+        const first = flagged() || ac.signal.aborted ? null : reply.next(); // starts the brain's request now
+        first?.catch(() => {}); // handled below; avoids an unhandled rejection if we deflect first
         await raceTimeout(classified, this.deps.classifierGateMs ?? 800);
-        if (!flagged() && !ac.signal.aborted) {
+        if (first && !flagged() && !ac.signal.aborted) {
           for (let next = await first; !next.done; next = await reply.next()) {
             if (ac.signal.aborted) break;
             const sentence = next.value;
@@ -219,6 +224,7 @@ export class Conversation {
     this.listening = null;
     this.log({ role: "system", text: "visit ended", label: reason });
     this.insight({ type: "visit", event: "end", reason });
+    this.deps.brain.endVisit?.();
     this.history = [];
     this.strikes = 0;
     this.misheard = 0;
@@ -228,6 +234,7 @@ export class Conversation {
 
   dispose(): void {
     this.cancelTurn();
+    this.deps.brain.endVisit?.();
     this.clearIdleTimer();
     this.listening?.close();
   }
@@ -286,7 +293,8 @@ export class Conversation {
   private answered(text: string, canned: boolean, startedAt: number, firstSentenceMs?: number): void {
     const sources = canned ? [] : (this.deps.sources?.match(text) ?? []);
     const voices = [...this.turnVoices];
-    this.insight({ type: "answer", text, canned, firstSentenceMs, totalMs: Date.now() - startedAt, sources, voices });
+    const brain = canned ? undefined : this.deps.brain.lastAnsweredBy;
+    this.insight({ type: "answer", text, canned, firstSentenceMs, totalMs: Date.now() - startedAt, sources, voices, brain });
   }
 
   private insight(insight: Insight): void {

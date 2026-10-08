@@ -1,0 +1,34 @@
+{
+  "name": "avatar-ava",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Trade-show booth avatar: LiveAvatar face, Claude brain, layered guardrails.",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build:client": "esbuild src/client/main.ts --bundle --format=esm --target=es2022 --sourcemap --outfile=public/app.js",
+    "dev": "npm run build:client && tsx watch src/server/index.ts",
+    "start": "npm run build:client && tsx src/server/index.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.131.0",
+    "@heygen/liveavatar-web-sdk": "^0.0.19",
+    "dotenv": "^18.0.6",
+    "express": "^5.2.1",
+    "ws": "^8.22.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^26.6.4",
+    "@types/ws": "^8.18.2",
+    "esbuild": "^0.28.2",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.3"
+  }
+}

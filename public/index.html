@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Booth avatar</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div id="staff-corner" aria-hidden="true"></div>
+    <span id="sandbox" hidden>Sandbox: sessions end after about a minute</span>
+
+    <main id="stage">
+      <video id="avatar" autoplay playsinline></video>
+
+      <aside id="panel">
+        <section id="attract" hidden>
+          <h1 id="attract-title">Meet our host</h1>
+          <p id="attract-sub"></p>
+          <button id="start">Start</button>
+        </section>
+
+        <section id="visit">
+          <h2>Conversation</h2>
+          <div id="captions" aria-live="polite"></div>
+          <p id="status"></p>
+          <button id="talk">Hold to talk</button>
+          <div id="suggestions"></div>
+        </section>
+      </aside>
+    </main>
+
+    <script type="module" src="app.js"></script>
+  </body>
+</html>

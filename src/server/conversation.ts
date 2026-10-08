@@ -294,7 +294,8 @@ export class Conversation {
     const sources = canned ? [] : (this.deps.sources?.match(text) ?? []);
     const voices = [...this.turnVoices];
     const brain = canned ? undefined : this.deps.brain.lastAnsweredBy;
-    this.insight({ type: "answer", text, canned, firstSentenceMs, totalMs: Date.now() - startedAt, sources, voices, brain });
+    const brainNote = canned ? undefined : this.deps.brain.lastNote;
+    this.insight({ type: "answer", text, canned, firstSentenceMs, totalMs: Date.now() - startedAt, sources, voices, brain, brainNote });
   }
 
   private insight(insight: Insight): void {

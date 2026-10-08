@@ -138,6 +138,7 @@ describe("FallbackBrain", () => {
     const brain = new FallbackBrain(genesys, claude, "Claude");
     expect(await collect(brain, "Hi")).toEqual(["Claude here."]);
     expect(brain.lastAnsweredBy).toBe("Claude (backup)");
+    expect(brain.lastNote).toMatch(/did not answer within 100 ms/);
     brain.endVisit();
   });
 

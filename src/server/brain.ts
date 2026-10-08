@@ -15,13 +15,16 @@ export interface Brain {
   reply(history: Turn[], visitorText: string, signal: AbortSignal): AsyncIterable<string>;
   /** True when questions must pass the input classifier before they reach this brain. */
   readonly screenFirst?: boolean;
-  /** Which brain answered the last turn, when more than one can. */
+  /** Which brain answered the last turn, for the backstage screen. */
   readonly lastAnsweredBy?: string;
+  /** Why the backup answered the last turn, when it did. */
+  readonly lastNote?: string;
   /** The visitor left; forget anything kept for them. */
   endVisit?(): void;
 }
 
 export class ClaudeBrain implements Brain {
+  readonly lastAnsweredBy = "Claude";
   private readonly system: string;
 
   constructor(

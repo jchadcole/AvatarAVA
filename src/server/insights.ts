@@ -26,6 +26,8 @@ export type Insight =
       voices: string[];
       /** Which brain answered when more than one can, e.g. "Genesys AVA" or "Claude (backup)". */
       brain?: string;
+      /** Why the backup brain answered, e.g. "Genesys AVA did not answer within 7000 ms". */
+      brainNote?: string;
     };
 
 export type StampedInsight = Insight & { ts: string };

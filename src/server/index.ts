@@ -41,7 +41,7 @@ const makeBrain = (): Brain =>
 console.log(
   genesys
     ? `BRAIN: Genesys AVA via ${webMessagingUrl(genesys.region, genesys.deploymentId)}, Claude answers if it fails or takes over ${genesys.replyTimeoutMs} ms.`
-    : `BRAIN: Claude ${env.claudeModel}.`,
+    : `BRAIN: Claude ${env.claudeModel}, not the Genesys AVA. shows/${env.showName}/show.json has "brain": "${show.brain}"${env.brain ? ` and .env has AVA_BRAIN=${env.brain}` : ""}; set it to "genesys" and restart to use the AVA.`,
 );
 const classifier = new InputClassifier(client, env.classifierModel);
 const deepgramVoice = env.deepgramTtsModel || show.voice;

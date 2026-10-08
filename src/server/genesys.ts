@@ -27,6 +27,8 @@ export interface GenesysOptions {
   quietMs: number;
   /** Test hook: connect here instead of the region's Web Messaging address. */
   url?: string;
+  /** Sees every message Genesys sends, for genesys:check. */
+  onRaw?(message: unknown): void;
 }
 
 export class GenesysTimeoutError extends Error {
@@ -172,6 +174,7 @@ export class GenesysBrain implements Brain {
       } catch {
         return;
       }
+      this.opts.onRaw?.(message);
       for (const listener of this.listeners) listener(message);
     });
     socket.on("error", () => {}); // surfaced through close and the timeouts
@@ -233,7 +236,8 @@ export class GenesysBrain implements Brain {
 export class FallbackBrain implements Brain {
   /** Which brain answered the last turn, for the backstage screen. */
   lastAnsweredBy: string | undefined;
-  lastError: string | undefined;
+  /** Why the backup answered the last turn, when it did. */
+  lastNote: string | undefined;
 
   constructor(
     private readonly primary: Brain & { name: string; screenFirst?: boolean; endVisit?(): void },
@@ -247,18 +251,22 @@ export class FallbackBrain implements Brain {
 
   async *reply(history: Turn[], visitorText: string, signal: AbortSignal): AsyncIterable<string> {
     this.lastAnsweredBy = this.primary.name;
+    this.lastNote = undefined;
+    const started = Date.now();
     let spoke = false;
     try {
       for await (const sentence of this.primary.reply(history, visitorText, signal)) {
         spoke = true;
         yield sentence;
       }
+      if (spoke) console.log(`BRAIN: ${this.primary.name} answered in ${((Date.now() - started) / 1000).toFixed(1)} s.`);
       if (spoke || signal.aborted) return;
-      this.lastError = `${this.primary.name} sent no words`;
+      this.lastNote = `${this.primary.name} sent no words`;
+      console.warn(`BRAIN: ${this.lastNote}, so ${this.backupName} answered.`);
     } catch (err) {
       if (signal.aborted) return;
-      this.lastError = err instanceof Error ? err.message : String(err);
-      console.warn(`${this.primary.name} failed, ${spoke ? "reply cut short" : `${this.backupName} answers`}: ${this.lastError}`);
+      this.lastNote = err instanceof Error ? err.message : String(err);
+      console.warn(`BRAIN: ${this.primary.name} failed (${this.lastNote}), ${spoke ? "reply cut short" : `so ${this.backupName} answered`}.`);
       if (spoke) return;
       // A stuck chat would make every later turn wait too, so start over.
       this.primary.endVisit?.();

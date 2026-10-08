@@ -4,8 +4,18 @@
  */
 export class SentenceChunker {
   private buffer = "";
+  private started = false;
 
-  constructor(private readonly minChars = 12) {}
+  /**
+   * @param firstClauseChars The first chunk may end at a comma, colon,
+   *   semicolon or dash once it is at least this long, so the avatar starts
+   *   talking without waiting for a long first sentence to be voiced whole.
+   *   0 turns this off.
+   */
+  constructor(
+    private readonly minChars = 12,
+    private readonly firstClauseChars = 30,
+  ) {}
 
   /** Adds streamed text and returns any sentences that are now complete. */
   push(text: string): string[] {
@@ -26,13 +36,26 @@ export class SentenceChunker {
       }
     }
     this.buffer = this.buffer.slice(start);
-    return out.map(cleanForSpeech).filter(Boolean);
+    if (!out.length && !this.started && this.firstClauseChars > 0) {
+      const clause = /[,;:]\s+|\s[–—-]\s+/g;
+      while ((match = clause.exec(this.buffer))) {
+        if (match.index < this.firstClauseChars) continue;
+        const end = match.index + match[0].length;
+        out.push(this.buffer.slice(0, end).trim());
+        this.buffer = this.buffer.slice(end);
+        break;
+      }
+    }
+    const spoken = out.map(cleanForSpeech).filter(Boolean);
+    if (spoken.length) this.started = true;
+    return spoken;
   }
 
   /** Returns whatever is left once the stream has ended. */
   flush(): string[] {
     const rest = cleanForSpeech(this.buffer.trim());
     this.buffer = "";
+    this.started = false;
     return rest ? [rest] : [];
   }
 }

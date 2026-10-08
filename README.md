@@ -40,15 +40,28 @@ npm start              # http://localhost:3000
 | --- | --- |
 | `ANTHROPIC_API_KEY` | Claude brain and input classifier. In a Claude cloud environment, name it `AVA_ANTHROPIC_API_KEY` instead. |
 | `LIVEAVATAR_API_KEY` | Avatar sessions |
-| `DEEPGRAM_API_KEY` | Speech-to-text and the avatar's voice |
+| `DEEPGRAM_API_KEY` | Speech-to-text, and the avatar's voice when ElevenLabs is off (or its backup when on) |
+| `ELEVENLABS_API_KEY` | Optional premium voice. When set, the host speaks with ElevenLabs and Deepgram covers any line ElevenLabs fails on or takes more than 4 seconds for |
+| `ELEVENLABS_VOICE_ID`, `ELEVENLABS_MODEL` | Optional overrides for the show's `elevenLabsVoiceId` and the model (default `eleven_flash_v2_5`, the fastest) |
 | `LIVEAVATAR_SANDBOX` | `true` (default) uses free ~1 minute sessions with the sandbox avatar. Set `false` to use the show's own avatar. |
 | `LIVEAVATAR_AVATAR_ID` | Optional override for the show's `avatarId` |
+| `LIVEAVATAR_PREWARM` | `true` keeps an avatar session open between visits, so Start is instant and the idle avatar is on screen. It uses LiveAvatar credits the whole time the page is open, so turn it on for presenter-led demos, not all-day booths. Ignored in sandbox mode. |
 | `DEEPGRAM_TTS_MODEL` | Optional override for the show's `voice` |
 | `CLAUDE_MODEL`, `CLAUDE_EFFORT` | Defaults `claude-opus-5-5` at `low` effort for fast spoken replies |
 | `CLAUDE_CLASSIFIER_MODEL` | Model for the input safety classifier (default `claude-haiku-4-5`, chosen for speed) |
 | `SHOW` | Which folder under `shows/` to load (default `demo`) |
 
 The kiosk server runs on the booth PC. Open it full screen in Chrome kiosk mode, for example `chrome --kiosk --autoplay-policy=no-user-gesture-required http://localhost:3000`.
+
+## Backstage screen
+
+Open `http://localhost:3000/backstage.html` on a second screen (or in a second Chrome window on the same PC) to show what happens under the hood while the avatar talks:
+
+- each visitor question, the guardrail checks it went through (speech check, instant rule screen, safety classifier, answer screen, model safety) with their verdicts and timing, highlighted in red when a check changed what the avatar said;
+- each answer, marked as either a fixed approved line or a generated answer, with the knowledge files it most closely matches and how long the first sentence took;
+- running totals: questions, share of answers matching approved knowledge, guardrail interventions, and the median time to the first sentence.
+
+The source match is a word-overlap estimate of which file an answer drew on, not proof. The screen only listens; it cannot change the kiosk. It shows the same text the transcript log keeps and nothing more.
 
 ## Per-show content
 
@@ -66,7 +79,7 @@ Sandbox mode only allows LiveAvatar's sample avatar. To show your own host:
 2. Copy the new avatar's ID into `"avatarId"` in `shows/<show>/show.json`.
 3. Set `LIVEAVATAR_SANDBOX=false` in `.env` and restart. The server log prints which avatar it is using.
 
-The avatar's voice always comes from Deepgram (`"voice"` in `show.json`), so pick a voice that suits the person.
+The avatar's voice comes from ElevenLabs when `ELEVENLABS_API_KEY` is set (`"elevenLabsVoiceId"` in `show.json`, default "Brian"), otherwise from Deepgram (`"voice"`). Pick a voice that suits the person; any voice in your ElevenLabs voice library works, including a licensed clone of the presenter. If ElevenLabs fails or is slow, that line is spoken with the Deepgram voice instead, and after three failures in a row the kiosk stays on Deepgram for a minute before trying again, so the avatar never goes silent.
 
 ## Develop
 
@@ -81,4 +94,5 @@ npm run dev       # rebuilds the client, restarts the server on change
 - Not yet tested end to end against live LiveAvatar and Deepgram accounts. First thing to check: whether sentence-by-sentence `repeatAudio` calls queue cleanly on the avatar or need to be merged into one utterance.
 - Push-to-talk only; hands-free voice detection and camera-based presence come later.
 - No offline mode yet: if the network drops, the page shows a "taking a break" message.
+- The first sentence takes about 2.5 seconds in a cloud test (October 2026): about 0.8 s classifier head start, about 1 s for Claude's first words, and the rest for text-to-speech. The first spoken chunk now ends at a clause break when the opening sentence is long, which roughly halved the wait. With ElevenLabs on, a line is voiced in about 0.4 to 0.7 s instead of Deepgram's 2 to 3 s, and the first sentence lands in about 1.6 to 3 s, most of it the classifier head start and Claude.
 - No admin page or dashboard yet; content is edited in `shows/` and logs are JSONL files.

@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Under the hood</title>
+    <link rel="stylesheet" href="backstage.css" />
+  </head>
+  <body>
+    <header>
+      <div>
+        <h1>Under the hood</h1>
+        <p id="subtitle">Live view of every question, the checks it passed, and where the answer came from</p>
+      </div>
+      <div id="badges">
+        <span id="voice-badge" hidden></span>
+        <span id="connection">Connecting…</span>
+      </div>
+    </header>
+
+    <section id="stats" aria-label="Session totals">
+      <div class="stat"><span class="value" id="stat-questions">0</span><span class="label">Questions</span></div>
+      <div class="stat"><span class="value" id="stat-grounded">–</span><span class="label">Answers from approved knowledge</span></div>
+      <div class="stat"><span class="value" id="stat-catches">0</span><span class="label">Times a guardrail stepped in</span></div>
+      <div class="stat"><span class="value" id="stat-latency">–</span><span class="label">Median time to first sentence</span></div>
+    </section>
+
+    <main id="feed" aria-live="polite">
+      <p id="empty">Waiting for the first question…</p>
+    </main>
+
+    <script type="module" src="backstage.js"></script>
+  </body>
+</html>

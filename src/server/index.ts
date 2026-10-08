@@ -7,11 +7,13 @@ import express from "express";
 import { WebSocketServer } from "ws";
 import { ClaudeBrain } from "./brain.ts";
 import { loadShow, pickAvatarId, readEnv } from "./config.ts";
-import { Conversation, type ServerMessage } from "./conversation.ts";
+import { Conversation, warmLines, type ServerMessage } from "./conversation.ts";
 import { InputClassifier } from "./guardrails.ts";
+import { InsightHub } from "./insights.ts";
 import { createLiteSessionToken } from "./liveavatar.ts";
+import { SourceMatcher } from "./sources.ts";
 import { TranscriptLog } from "./transcriptLog.ts";
-import { DeepgramStt, DeepgramTts } from "./voice.ts";
+import { DeepgramStt, DeepgramTts, ElevenLabsTts, FallbackTts, type Tts } from "./voice.ts";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const env = readEnv();
@@ -26,9 +28,37 @@ const avatarId = pickAvatarId(env, show);
 const client = new Anthropic({ apiKey: process.env.AVA_ANTHROPIC_API_KEY || undefined });
 const brain = new ClaudeBrain(client, env.claudeModel, env.claudeEffort, show);
 const classifier = new InputClassifier(client, env.classifierModel);
-const tts = new DeepgramTts(env.deepgramApiKey, env.deepgramTtsModel || show.voice);
+const deepgramVoice = env.deepgramTtsModel || show.voice;
+const elevenLabsVoice = env.elevenLabsVoiceId || show.elevenLabsVoiceId;
+const deepgramTts = new DeepgramTts(env.deepgramApiKey, deepgramVoice);
+const fallbackTts = env.elevenLabsApiKey
+  ? new FallbackTts(new ElevenLabsTts(env.elevenLabsApiKey, elevenLabsVoice, env.elevenLabsModel), deepgramTts, {
+      primaryName: "ElevenLabs",
+      backupName: "Deepgram",
+    })
+  : null;
+const tts: Tts = fallbackTts ?? deepgramTts;
+const voiceName = fallbackTts
+  ? `ElevenLabs ${elevenLabsVoice} (${env.elevenLabsModel}), Deepgram ${deepgramVoice} as backup`
+  : `Deepgram ${deepgramVoice} only (no ELEVENLABS_API_KEY)`;
 const stt = new DeepgramStt(env.deepgramApiKey, env.deepgramSttModel, show.language);
 const log = new TranscriptLog(path.resolve(root, env.logDir));
+const insights = new InsightHub();
+const sources = new SourceMatcher(show.knowledgeFiles);
+const lineAudio = new Map<string, Promise<Buffer>>();
+void warmLines(show, tts, lineAudio).then(async () => {
+  // Startup voice check: the greeting was just voiced, so say plainly which voice did it.
+  const greeting = await lineAudio.get(show.greeting)?.catch(() => undefined);
+  if (!fallbackTts) {
+    console.log(`VOICE CHECK: Deepgram ${deepgramVoice}. Add ELEVENLABS_API_KEY to .env for the ElevenLabs voice.`);
+  } else if (greeting && fallbackTts.voiceOf(greeting) === "ElevenLabs") {
+    console.log(`VOICE CHECK: ElevenLabs is working (voice ${elevenLabsVoice}, ${env.elevenLabsModel}).`);
+  } else {
+    console.warn(
+      `VOICE CHECK FAILED: ElevenLabs did not voice the greeting, so you will hear the Deepgram backup. Reason: ${fallbackTts.lastError ?? "unknown"}`,
+    );
+  }
+});
 
 const app = express();
 app.use(express.json());
@@ -41,6 +71,8 @@ app.get("/api/show", (_req, res) => {
     eventName: show.eventName,
     suggestedQuestions: show.suggestedQuestions,
     sandbox: env.liveAvatarSandbox,
+    prewarm: env.liveAvatarPrewarm,
+    voice: voiceName,
   });
 });
 
@@ -60,7 +92,25 @@ app.post("/api/session", async (_req, res) => {
 });
 
 const server = http.createServer(app);
-const wss = new WebSocketServer({ server, path: "/ws" });
+const wss = new WebSocketServer({ noServer: true });
+const backstage = new WebSocketServer({ noServer: true });
+server.on("upgrade", (req, socket, head) => {
+  const route = new URL(req.url ?? "/", "http://kiosk").pathname;
+  const target = route === "/ws" ? wss : route === "/backstage-ws" ? backstage : null;
+  if (!target) {
+    socket.destroy();
+    return;
+  }
+  target.handleUpgrade(req, socket, head, (ws) => target.emit("connection", ws, req));
+});
+
+// The backstage screen only listens; it never sends anything that changes the kiosk.
+backstage.on("connection", (socket) => {
+  const unsubscribe = insights.subscribe((insight) => {
+    if (socket.readyState === socket.OPEN) socket.send(JSON.stringify(insight));
+  });
+  socket.on("close", unsubscribe);
+});
 
 /** Messages the kiosk page sends. Binary frames are PCM16 16 kHz mic audio. */
 type ClientMessage =
@@ -74,7 +124,19 @@ wss.on("connection", (socket) => {
   const send = (message: ServerMessage) => {
     if (socket.readyState === socket.OPEN) socket.send(JSON.stringify(message));
   };
-  const conversation = new Conversation({ show, brain, classifier, tts, stt, log, send, kioskId: env.kioskId });
+  const conversation = new Conversation({
+    show,
+    brain,
+    classifier,
+    tts,
+    stt,
+    log,
+    send,
+    kioskId: env.kioskId,
+    lineAudio,
+    insight: (insight) => insights.publish(insight),
+    sources,
+  });
 
   socket.on("message", (data, isBinary) => {
     if (isBinary) {
@@ -110,5 +172,6 @@ wss.on("connection", (socket) => {
 
 server.listen(env.port, () => {
   console.log(`${show.avatarName} kiosk for ${show.eventName} on http://localhost:${env.port}`);
-  console.log(`LiveAvatar ${env.liveAvatarSandbox ? "SANDBOX (free, ~1 minute sessions)" : "LIVE"} mode, avatar ${avatarId}, voice ${env.deepgramTtsModel || show.voice}, model ${env.claudeModel}`);
+  console.log(`Backstage screen on http://localhost:${env.port}/backstage.html`);
+  console.log(`LiveAvatar ${env.liveAvatarSandbox ? "SANDBOX (free, ~1 minute sessions)" : "LIVE"} mode, avatar ${avatarId}, voice ${voiceName}, model ${env.claudeModel}${env.liveAvatarPrewarm ? ", avatar kept warm between visits" : ""}`);
 });

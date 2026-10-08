@@ -297,18 +297,17 @@ export class Conversation {
  * visitor hears them without waiting on text-to-speech.
  */
 export async function warmLines(show: ShowConfig, tts: Tts, cache: Map<string, Promise<Buffer>>): Promise<void> {
-  const lines = [show.greeting, ...Object.values(show.cannedLines)];
-  await Promise.all(
-    lines.map((text) => {
-      if (cache.has(text)) return cache.get(text);
-      const audio = tts.synthesize(text);
-      cache.set(text, audio);
-      return audio.catch((err) => {
-        cache.delete(text);
-        console.warn(`Could not pre-synthesize "${text}":`, err);
-      });
-    }),
-  );
+  // One at a time: voice plans cap parallel requests (ElevenLabs free allows 4),
+  // and a burst at startup would push lines onto the backup voice.
+  for (const text of new Set([show.greeting, ...Object.values(show.cannedLines)])) {
+    if (cache.has(text)) continue;
+    const audio = tts.synthesize(text);
+    cache.set(text, audio);
+    await audio.catch((err) => {
+      cache.delete(text);
+      console.warn(`Could not pre-synthesize "${text}":`, err);
+    });
+  }
 }
 
 /** Waits for the promise, but never longer than `ms`. */

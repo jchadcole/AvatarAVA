@@ -13,7 +13,7 @@ import { InsightHub } from "./insights.ts";
 import { createLiteSessionToken } from "./liveavatar.ts";
 import { SourceMatcher } from "./sources.ts";
 import { TranscriptLog } from "./transcriptLog.ts";
-import { DeepgramStt, DeepgramTts } from "./voice.ts";
+import { DeepgramStt, DeepgramTts, ElevenLabsTts, FallbackTts, type Tts } from "./voice.ts";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const env = readEnv();
@@ -28,7 +28,15 @@ const avatarId = pickAvatarId(env, show);
 const client = new Anthropic({ apiKey: process.env.AVA_ANTHROPIC_API_KEY || undefined });
 const brain = new ClaudeBrain(client, env.claudeModel, env.claudeEffort, show);
 const classifier = new InputClassifier(client, env.classifierModel);
-const tts = new DeepgramTts(env.deepgramApiKey, env.deepgramTtsModel || show.voice);
+const deepgramVoice = env.deepgramTtsModel || show.voice;
+const elevenLabsVoice = env.elevenLabsVoiceId || show.elevenLabsVoiceId;
+const deepgramTts = new DeepgramTts(env.deepgramApiKey, deepgramVoice);
+const tts: Tts = env.elevenLabsApiKey
+  ? new FallbackTts(new ElevenLabsTts(env.elevenLabsApiKey, elevenLabsVoice, env.elevenLabsModel), deepgramTts)
+  : deepgramTts;
+const voiceName = env.elevenLabsApiKey
+  ? `ElevenLabs ${elevenLabsVoice} (${env.elevenLabsModel}), Deepgram ${deepgramVoice} as backup`
+  : `Deepgram ${deepgramVoice}`;
 const stt = new DeepgramStt(env.deepgramApiKey, env.deepgramSttModel, show.language);
 const log = new TranscriptLog(path.resolve(root, env.logDir));
 const insights = new InsightHub();
@@ -148,5 +156,5 @@ wss.on("connection", (socket) => {
 server.listen(env.port, () => {
   console.log(`${show.avatarName} kiosk for ${show.eventName} on http://localhost:${env.port}`);
   console.log(`Backstage screen on http://localhost:${env.port}/backstage.html`);
-  console.log(`LiveAvatar ${env.liveAvatarSandbox ? "SANDBOX (free, ~1 minute sessions)" : "LIVE"} mode, avatar ${avatarId}, voice ${env.deepgramTtsModel || show.voice}, model ${env.claudeModel}${env.liveAvatarPrewarm ? ", avatar kept warm between visits" : ""}`);
+  console.log(`LiveAvatar ${env.liveAvatarSandbox ? "SANDBOX (free, ~1 minute sessions)" : "LIVE"} mode, avatar ${avatarId}, voice ${voiceName}, model ${env.claudeModel}${env.liveAvatarPrewarm ? ", avatar kept warm between visits" : ""}`);
 });

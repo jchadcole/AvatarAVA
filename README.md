@@ -40,7 +40,9 @@ npm start              # http://localhost:3000
 | --- | --- |
 | `ANTHROPIC_API_KEY` | Claude brain and input classifier. In a Claude cloud environment, name it `AVA_ANTHROPIC_API_KEY` instead. |
 | `LIVEAVATAR_API_KEY` | Avatar sessions |
-| `DEEPGRAM_API_KEY` | Speech-to-text and the avatar's voice |
+| `DEEPGRAM_API_KEY` | Speech-to-text, and the avatar's voice when ElevenLabs is off (or its backup when on) |
+| `ELEVENLABS_API_KEY` | Optional premium voice. When set, the host speaks with ElevenLabs and Deepgram covers any line ElevenLabs fails on or takes more than 4 seconds for |
+| `ELEVENLABS_VOICE_ID`, `ELEVENLABS_MODEL` | Optional overrides for the show's `elevenLabsVoiceId` and the model (default `eleven_flash_v2_5`, the fastest) |
 | `LIVEAVATAR_SANDBOX` | `true` (default) uses free ~1 minute sessions with the sandbox avatar. Set `false` to use the show's own avatar. |
 | `LIVEAVATAR_AVATAR_ID` | Optional override for the show's `avatarId` |
 | `LIVEAVATAR_PREWARM` | `true` keeps an avatar session open between visits, so Start is instant and the idle avatar is on screen. It uses LiveAvatar credits the whole time the page is open, so turn it on for presenter-led demos, not all-day booths. Ignored in sandbox mode. |
@@ -77,7 +79,7 @@ Sandbox mode only allows LiveAvatar's sample avatar. To show your own host:
 2. Copy the new avatar's ID into `"avatarId"` in `shows/<show>/show.json`.
 3. Set `LIVEAVATAR_SANDBOX=false` in `.env` and restart. The server log prints which avatar it is using.
 
-The avatar's voice always comes from Deepgram (`"voice"` in `show.json`), so pick a voice that suits the person.
+The avatar's voice comes from ElevenLabs when `ELEVENLABS_API_KEY` is set (`"elevenLabsVoiceId"` in `show.json`, default "Brian"), otherwise from Deepgram (`"voice"`). Pick a voice that suits the person; any voice in your ElevenLabs voice library works, including a licensed clone of the presenter. If ElevenLabs fails or is slow, that line is spoken with the Deepgram voice instead, and after three failures in a row the kiosk stays on Deepgram for a minute before trying again, so the avatar never goes silent.
 
 ## Develop
 

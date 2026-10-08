@@ -41,6 +41,70 @@ export class DeepgramTts implements Tts {
   }
 }
 
+/**
+ * ElevenLabs voice, via the streaming endpoint so audio starts arriving as soon
+ * as it is generated. Returns the same raw PCM 24 kHz the avatar expects.
+ */
+export class ElevenLabsTts implements Tts {
+  constructor(
+    private readonly apiKey: string,
+    private readonly voiceId: string,
+    private readonly model: string,
+  ) {}
+
+  async synthesize(text: string, signal?: AbortSignal): Promise<Buffer> {
+    const url = new URL(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(this.voiceId)}/stream`);
+    url.searchParams.set("output_format", "pcm_24000");
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "xi-api-key": this.apiKey, "Content-Type": "application/json", Accept: "audio/pcm" },
+      body: JSON.stringify({ text, model_id: this.model }),
+      signal,
+    });
+    if (!res.ok || !res.body) throw new Error(`ElevenLabs TTS failed: ${res.status} ${await res.text()}`);
+    const chunks: Buffer[] = [];
+    for await (const chunk of res.body) chunks.push(Buffer.from(chunk));
+    return Buffer.concat(chunks);
+  }
+}
+
+/**
+ * Uses the premium voice and falls back to the backup voice whenever it fails
+ * or is slow, so the avatar never goes silent. After repeated failures it skips
+ * the premium voice for a while instead of paying the timeout on every line.
+ */
+export class FallbackTts implements Tts {
+  private failures = 0;
+  private skipUntil = 0;
+
+  constructor(
+    private readonly primary: Tts,
+    private readonly backup: Tts,
+    private readonly opts: { timeoutMs?: number; maxFailures?: number; cooldownMs?: number; now?: () => number } = {},
+  ) {}
+
+  async synthesize(text: string, signal?: AbortSignal): Promise<Buffer> {
+    const now = this.opts.now ?? Date.now;
+    if (now() >= this.skipUntil) {
+      const timeout = AbortSignal.timeout(this.opts.timeoutMs ?? 4000);
+      try {
+        const audio = await this.primary.synthesize(text, signal ? AbortSignal.any([signal, timeout]) : timeout);
+        this.failures = 0;
+        return audio;
+      } catch (err) {
+        if (signal?.aborted) throw err;
+        console.warn("Premium voice failed; using the backup voice for this line.", err);
+        if (++this.failures >= (this.opts.maxFailures ?? 3)) {
+          this.skipUntil = now() + (this.opts.cooldownMs ?? 60_000);
+          this.failures = 0;
+          console.warn("Premium voice keeps failing; using the backup voice for the next minute.");
+        }
+      }
+    }
+    return this.backup.synthesize(text, signal);
+  }
+}
+
 export class DeepgramStt implements Stt {
   constructor(
     private readonly apiKey: string,

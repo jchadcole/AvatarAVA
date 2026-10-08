@@ -20,8 +20,10 @@ const ShowFile = z.object({
   avatarName: z.string(),
   /** LiveAvatar avatar for this show (from the LiveAvatar dashboard). Ignored in sandbox mode. */
   avatarId: z.string().optional(),
-  /** Deepgram Aura voice for the host, e.g. "aura-2-orpheus-en". */
+  /** Deepgram Aura voice for the host, e.g. "aura-2-orpheus-en". Also the backup when ElevenLabs is on. */
   voice: z.string().default("aura-2-orpheus-en"),
+  /** ElevenLabs voice ID for the host; used when ELEVENLABS_API_KEY is set. Default: "Brian". */
+  elevenLabsVoiceId: z.string().default("nPczCjzI2devNBz1zQrb"),
   language: z.string().default("en"),
   greeting: z.string(),
   suggestedQuestions: z.array(z.string()).default([]),
@@ -126,6 +128,11 @@ export interface Env {
   deepgramSttModel: string;
   /** DEEPGRAM_TTS_MODEL, an override for the show's voice. */
   deepgramTtsModel?: string;
+  /** ELEVENLABS_API_KEY: when set, the host speaks with ElevenLabs and Deepgram is the backup. */
+  elevenLabsApiKey?: string;
+  /** ELEVENLABS_VOICE_ID, an override for the show's elevenLabsVoiceId. */
+  elevenLabsVoiceId?: string;
+  elevenLabsModel: string;
 }
 
 /** The only avatar LiveAvatar allows in sandbox mode ("Wayne"). */
@@ -157,6 +164,9 @@ export function readEnv(env: NodeJS.ProcessEnv = process.env): Env {
     deepgramApiKey: env.DEEPGRAM_API_KEY || undefined,
     deepgramSttModel: env.DEEPGRAM_STT_MODEL ?? "nova-3",
     deepgramTtsModel: env.DEEPGRAM_TTS_MODEL || undefined,
+    elevenLabsApiKey: env.ELEVENLABS_API_KEY || undefined,
+    elevenLabsVoiceId: env.ELEVENLABS_VOICE_ID || undefined,
+    elevenLabsModel: env.ELEVENLABS_MODEL || "eleven_flash_v2_5",
   };
 }
 

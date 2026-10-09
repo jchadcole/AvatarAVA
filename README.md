@@ -21,7 +21,7 @@ LiveAvatar web SDK <--say(audio)--
 ```
 
 - **Face:** [LiveAvatar](https://www.liveavatar.com/) in LITE ("Avatar Only") mode. The server mints a session token with the API key; the browser only sees the token and uses `@heygen/liveavatar-web-sdk` to show the video and send our audio.
-- **Brain:** Claude, with the persona and booth knowledge in a cached system prompt (`shows/<show>/persona.md`, `knowledge.md`). Replies stream and are spoken sentence by sentence.
+- **Brain:** Claude by default (or a Genesys AVA, see below), with the persona and booth knowledge in a cached system prompt (`shows/<show>/persona.md`, `knowledge.md`). Replies stream and are spoken sentence by sentence.
 - **Guardrails:** a local precheck (empty, gibberish, too long) and an instant pattern screen for obvious rule-rewriting attempts; a Claude input classifier (`normal`, `off_topic`, `abusive`, `injection`) that starts with the reply, gets a short head start (800 ms), and can cut the avatar off mid-reply if it flags the input late; a per-sentence output screen (blocked terms, competitors, prices, prompt leaks); canned deflection lines; a strike limit that ends the visit; and server-side model fallback on refusals.
 - **Visits:** a visitor taps Start, talks with push-to-talk (button or spacebar) or taps a suggested question. Memory is wiped when the visit ends on idle, on repeated abuse, or on a staff reset (tap the top-left corner three times).
 - **Logs:** text-only transcripts with guardrail labels and first-sentence latency, one JSON line per event in `logs/YYYY-MM-DD.jsonl`. No audio or video is stored.
@@ -67,9 +67,37 @@ The source match is a word-overlap estimate of which file an answer drew on, not
 
 Copy `shows/demo` to `shows/<your-show>` and edit:
 
-- `show.json`: the LiveAvatar `avatarId` (ignored in sandbox mode), the Deepgram `voice` (any [Aura-2 voice](https://developers.deepgram.com/docs/tts-models), default `aura-2-orpheus-en`), names, greeting, suggested questions, product keyterms for speech recognition, blocked terms, competitors, idle timeout, strike limit, and every canned line.
+- `show.json`: optionally `about`, one line on what the booth covers (the safety classifier uses it to tell on-topic from off-topic questions; default: the company, its products, demos and the event); the LiveAvatar `avatarId` (ignored in sandbox mode), the Deepgram `voice` (any [Aura-2 voice](https://developers.deepgram.com/docs/tts-models), default `aura-2-orpheus-en`), names, greeting, suggested questions, product keyterms for speech recognition, blocked terms, competitors, idle timeout, strike limit, and every canned line.
 - `persona.md`: how the host speaks and stays in character. `{{avatarName}}`, `{{company}}`, `{{eventName}}` and `{{competitors}}` are filled in from `show.json`.
 - `knowledge.md` and the `knowledge/` folder: the only facts the avatar may answer from. Drop plain-text or Markdown files (`.md`, `.txt`) into `knowledge/`, one topic per file if you like; every file is loaded in name order when the server starts. Convert PDFs, slides and web pages to text first, and keep the total to what a booth host needs (the server warns above about 400,000 characters). If a visitor asks something the files don't cover, the avatar says it isn't sure and offers a booth teammate. The demo show uses a summary of the public genesys.com site (October 2026); each file names its source page.
+
+## Genesys AVA as the brain (optional)
+
+A show can take its answers from a Genesys Cloud Agentic Virtual Agent (AVA) instead of Claude. Everything else stays the same: Deepgram listens, our guardrails screen the question and every sentence of the answer, and ElevenLabs and LiveAvatar speak it.
+
+- The server opens a guest chat on a Genesys **Web Messaging** deployment for each visitor and sends the screened question. The deployment's inbound message flow hands it to a digital bot flow that calls the AVA, and the AVA's reply comes back on the same chat. When the visit ends, the chat is dropped and the next visitor gets a new one.
+- The visitor's chat opens when they tap Start, and each question goes to Genesys at once, while the safety classifier checks it. A flagged question is never answered aloud (Ava says her deflection line instead), but Genesys does see it. Set `"waitForScreening": true` to hold every question until the classifier passes it, so flagged questions never leave the booth; that adds 1-3 seconds per answer.
+- When the visitor taps Start, the app sends the bot a quiet "Hello" (`warmUpText`) and throws away its welcome line, so the visitor's first question gets a real answer and the bot is already running. A reply that is only a welcome line ("Hello, thanks for contacting... How can I help you today?") is never spoken as an answer.
+- If the AVA has not started answering within `replyTimeoutMs` (default 7 seconds), or Genesys errors, Claude answers that turn instead. The backstage screen shows which brain answered.
+- The AVA's replies arrive as whole chat messages rather than word by word, so expect Ava to start talking later than with Claude.
+
+To turn it on, set this in `shows/<show>/show.json` (or `AVA_BRAIN`, `GENESYS_REGION` and `GENESYS_DEPLOYMENT_ID` in `.env`):
+
+```json
+"brain": "genesys",
+"genesys": {
+  "region": "mypurecloud.com",
+  "deploymentId": "<Messenger deployment ID>",
+  "origin": "",
+  "replyTimeoutMs": 7000,
+  "waitForScreening": false,
+  "warmUpText": "Hello"
+}
+```
+
+`region` is your org's domain (the part after `apps.` in the Genesys Cloud address you log in at, e.g. `usw2.pure.cloud`). `origin` is only needed if the deployment restricts domains: set it to one of the allowed domains, e.g. `https://booth.example.com`. Nothing here is a password; the deployment ID is the only key, so keep domain restriction or a short session lifetime on in Genesys.
+
+Check the connection without the avatar: `npm run genesys:check -- "What is Genesys Cloud?"` prints the AVA's answer and how long it took.
 
 ## Using your own avatar
 

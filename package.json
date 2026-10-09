@@ -12,7 +12,8 @@
     "dev": "npm run build:client && tsx watch src/server/index.ts",
     "start": "npm run build:client && tsx src/server/index.ts",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "genesys:check": "tsx scripts/genesys-check.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.131.0",

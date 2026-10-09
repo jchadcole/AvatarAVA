@@ -13,9 +13,22 @@ export class RefusalError extends Error {
 /** Streams the avatar's spoken reply, one sentence at a time. */
 export interface Brain {
   reply(history: Turn[], visitorText: string, signal: AbortSignal): AsyncIterable<string>;
+  /** True when questions must pass the input classifier before they reach this brain. */
+  readonly screenFirst?: boolean;
+  /** Which brain answered the last turn, for the backstage screen. */
+  readonly lastAnsweredBy?: string;
+  /** Why the backup answered the last turn, when it did. */
+  readonly lastNote?: string;
+  /** How long the last answer's first words took to arrive, when the brain measures it. */
+  readonly lastReplyMs?: number;
+  /** A visitor arrived; get ready for their first question. */
+  prepare?(): void;
+  /** The visitor left; forget anything kept for them. */
+  endVisit?(): void;
 }
 
 export class ClaudeBrain implements Brain {
+  readonly lastAnsweredBy = "Claude";
   private readonly system: string;
 
   constructor(

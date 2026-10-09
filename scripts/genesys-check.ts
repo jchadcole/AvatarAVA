@@ -7,7 +7,7 @@ import "dotenv/config";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadShow, pickGenesys, readEnv } from "../src/server/config.ts";
-import { GenesysBrain, webMessagingUrl } from "../src/server/genesys.ts";
+import { GenesysBrain, looksLikeGreeting, webMessagingUrl } from "../src/server/genesys.ts";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const env = readEnv();
@@ -25,6 +25,7 @@ console.log(
     : `npm start will answer with: CLAUDE, not the AVA. Set "brain": "genesys" in shows/${env.showName}/show.json to use the AVA.`,
 );
 console.log(`Connecting to ${webMessagingUrl(settings.region, settings.deploymentId)}`);
+if (settings.warmUpText) console.log(`Warm-up: sending "${settings.warmUpText}" first, as the app does when a visitor taps Start.`);
 console.log(`Asking: ${question}\n`);
 
 const started = Date.now();
@@ -42,18 +43,31 @@ const brain = new GenesysBrain({
   },
 });
 const answer: string[] = [];
+// The app opens the chat and warms the bot up while Ava greets the visitor,
+// so time the question from when that is done.
+await brain.prepare();
+const asked = Date.now();
+console.log(`  [genesys] ${seconds()} s | --- your question is sent now ---`);
+const sinceAsked = () => ((Date.now() - asked) / 1000).toFixed(1);
 let first: string | undefined;
 try {
   for await (const sentence of brain.reply([], question, new AbortController().signal)) {
-    first ??= seconds();
+    first ??= sinceAsked();
     answer.push(sentence);
+  }
+  if (brain.lastWarmUpReply) {
+    console.log(`\nWarm-up reply (discarded, never spoken): ${brain.lastWarmUpReply}`);
+    console.log("  Is this your booth AVA? If it greets as a different line or company, the Messenger deployment reaches the wrong bot.");
   }
   if (!answer.length) {
     console.log("\nGENESYS CHECK FAILED: the AVA sent no words. Check the bot flow and that the AVA is published.");
     process.exitCode = 1;
   } else {
     console.log(`\nAVA ANSWER (exactly what Ava would say):\n${answer.join(" ")}\n`);
-    console.log(`GENESYS CHECK OK: first words after ${first} s, whole answer after ${seconds()} s.`);
+    if (looksLikeGreeting(answer.join(" "))) {
+      console.log("WARNING: this looks like a greeting, not an answer. Check which bot the Messenger deployment reaches.");
+    }
+    console.log(`GENESYS CHECK OK: first words ${first} s after the question, whole answer after ${sinceAsked()} s.`);
     if (Number(first) * 1000 > settings.replyTimeoutMs) {
       console.log(`Note: that is slower than replyTimeoutMs (${settings.replyTimeoutMs} ms), so in the app Claude would answer instead. Raise replyTimeoutMs in show.json.`);
     }

@@ -41,8 +41,18 @@ const ShowFile = z.object({
       quietMs: z.number().int().positive().default(800),
       /** true: hold each question until the safety classifier passes it (adds 1-3 s). */
       waitForScreening: z.boolean().default(false),
+      /** Sent when a visitor taps Start so the bot's welcome message is out of the way; "" turns it off. */
+      warmUpText: z.string().default("Hello"),
     })
-    .default({ region: "", deploymentId: "", origin: "", replyTimeoutMs: 7000, quietMs: 800, waitForScreening: false }),
+    .default({
+      region: "",
+      deploymentId: "",
+      origin: "",
+      replyTimeoutMs: 7000,
+      quietMs: 800,
+      waitForScreening: false,
+      warmUpText: "Hello",
+    }),
   greeting: z.string(),
   suggestedQuestions: z.array(z.string()).default([]),
   keyterms: z.array(z.string()).default([]),

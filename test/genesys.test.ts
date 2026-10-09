@@ -5,7 +5,7 @@ import { WebSocketServer } from "ws";
 import type { Brain } from "../src/server/brain.ts";
 import { loadShow, pickGenesys, readEnv } from "../src/server/config.ts";
 import { Conversation, type ServerMessage } from "../src/server/conversation.ts";
-import { FallbackBrain, GenesysBrain, GenesysTimeoutError, webMessagingUrl } from "../src/server/genesys.ts";
+import { FallbackBrain, GenesysBrain, GenesysTimeoutError, looksLikeGreeting, webMessagingUrl } from "../src/server/genesys.ts";
 import type { Insight } from "../src/server/insights.ts";
 
 /**
@@ -13,13 +13,14 @@ import type { Insight } from "../src/server/insights.ts";
  * guest's message back as Inbound (as Genesys does), shows typing, then sends
  * the AVA's reply as Outbound messages.
  */
-async function mockGenesys(opts: { replies?: string[]; delayMs?: number; sessionCode?: number } = {}) {
+async function mockGenesys(opts: { replies?: string[]; delayMs?: number; sessionCode?: number; greeting?: string } = {}) {
   const server = new WebSocketServer({ port: 0 });
   await new Promise((resolve) => server.once("listening", resolve));
   const received: { action: string; token: string; message?: { type: string; text?: string } }[] = [];
   const origins: (string | undefined)[] = [];
   server.on("connection", (socket, req) => {
     origins.push(req.headers.origin);
+    let greeted = false;
     const send = (body: unknown) => socket.send(JSON.stringify(body));
     socket.on("message", (data) => {
       const msg = JSON.parse(data.toString());
@@ -35,7 +36,10 @@ async function mockGenesys(opts: { replies?: string[]; delayMs?: number; session
             code: 200,
             body: { type: "Event", direction: "Outbound", events: [{ eventType: "Typing", typing: { type: "On" } }] },
           });
-          for (const text of opts.replies ?? []) {
+          // Like a real AVA flow: the bot's first words in a chat are its welcome line.
+          const first = opts.greeting && !greeted;
+          greeted = true;
+          for (const text of first ? [opts.greeting!] : (opts.replies ?? [])) {
             send({ type: "message", class: "StructuredMessage", code: 200, body: { type: "Text", text, direction: "Outbound" } });
           }
         }, opts.delayMs ?? 5);
@@ -51,7 +55,10 @@ afterEach(() => {
   for (const s of servers.splice(0)) s.close();
 });
 
-async function brainFor(mock: Parameters<typeof mockGenesys>[0], extra: { replyTimeoutMs?: number; origin?: string } = {}) {
+async function brainFor(
+  mock: Parameters<typeof mockGenesys>[0],
+  extra: { replyTimeoutMs?: number; origin?: string; warmUpText?: string } = {},
+) {
   const genesys = await mockGenesys(mock);
   servers.push(genesys.server);
   const brain = new GenesysBrain({
@@ -61,6 +68,7 @@ async function brainFor(mock: Parameters<typeof mockGenesys>[0], extra: { replyT
     replyTimeoutMs: extra.replyTimeoutMs ?? 1000,
     quietMs: 50,
     origin: extra.origin,
+    warmUpText: extra.warmUpText ?? "",
   });
   return { brain, ...genesys };
 }
@@ -133,6 +141,30 @@ describe("GenesysBrain", () => {
     const opts = { region: "mypurecloud.com", deploymentId: "d", replyTimeoutMs: 1000, quietMs: 50 };
     expect(new GenesysBrain(opts).screenFirst).toBe(false);
     expect(new GenesysBrain({ ...opts, waitForScreening: true }).screenFirst).toBe(true);
+  });
+
+  it("gets the bot's welcome line out of the way before the first question", async () => {
+    const greeting = "Hello, thanks for contacting the booth line. How can I help you today?";
+    const { brain, received } = await brainFor({ greeting, replies: ["Genesys Cloud is a CX platform."] }, { warmUpText: "Hello" });
+    brain.prepare();
+    expect(await collect(brain, "What is Genesys Cloud?")).toEqual(["Genesys Cloud is a CX platform."]);
+    expect(brain.lastWarmUpReply).toBe(greeting);
+    expect(received.filter((m) => m.action === "onMessage").map((m) => m.message?.text)).toEqual(["Hello", "What is Genesys Cloud?"]);
+    brain.endVisit();
+  });
+
+  it("says plainly when the bot only greets and never answers", async () => {
+    const greeting = "Hello, thanks for contacting the CDC Dog Importation line. How can I help you today?";
+    const { brain } = await brainFor({ greeting }, { replyTimeoutMs: 300 });
+    await expect(collect(brain, "What is Genesys Cloud?")).rejects.toThrow(/only greeted .*CDC Dog Importation/);
+    brain.endVisit();
+  });
+
+  it("tells greetings from answers", () => {
+    expect(looksLikeGreeting("Hello, thanks for contacting the CDC Dog Importation line. How can I help you today?")).toBe(true);
+    expect(looksLikeGreeting("Welcome! How may I assist you?")).toBe(true);
+    expect(looksLikeGreeting("Genesys Cloud is a CX platform. How can I help you further?")).toBe(false);
+    expect(looksLikeGreeting("Hello! Genesys Cloud is an all-in-one contact center platform.")).toBe(false);
   });
 
   it("sends the configured Origin header", async () => {
@@ -246,7 +278,7 @@ describe("Conversation with a brain that needs screened questions", () => {
 });
 
 describe("pickGenesys", () => {
-  const base = { brain: "claude" as const, genesys: { region: "", deploymentId: "", origin: "", replyTimeoutMs: 7000, quietMs: 800, waitForScreening: false } };
+  const base = { brain: "claude" as const, genesys: { region: "", deploymentId: "", origin: "", replyTimeoutMs: 7000, quietMs: 800, waitForScreening: false, warmUpText: "Hello" } };
 
   it("is off unless the show or AVA_BRAIN turns it on", () => {
     expect(pickGenesys(readEnv({}), base)).toBeNull();

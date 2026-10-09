@@ -31,6 +31,12 @@ export interface GenesysOptions {
    * and a flagged one is still never spoken.
    */
   waitForScreening?: boolean;
+  /**
+   * Sent as soon as the chat opens, so the bot's welcome message ("Hello,
+   * thanks for contacting...") arrives and is discarded before the visitor's
+   * first question. Empty: no warm-up.
+   */
+  warmUpText?: string;
   /** Test hook: connect here instead of the region's Web Messaging address. */
   url?: string;
   /** Sees every message Genesys sends, for genesys:check. */
@@ -66,8 +72,23 @@ type Inbound = {
   };
 };
 
+const GREETING_START = /^(hi|hello|hey|welcome|greetings|good (morning|afternoon|evening)|thanks?( you)? for)\b/i;
+const OFFER_HELP = /\b(how (can|may) i (help|assist)|what can i (help|do)|help you (with )?today|how can we help)\b/i;
+
+/** A bot's welcome line ("Hello, thanks for contacting... How can I help you today?") rather than an answer. */
+export function looksLikeGreeting(text: string): boolean {
+  return GREETING_START.test(text.trim()) && OFFER_HELP.test(text);
+}
+
+/** The visitor just said hello, so a greeting back is a fair answer. */
+function isHello(text: string): boolean {
+  return text.trim().length <= 30 && /^(hi|hello|hey|good (morning|afternoon|evening))\b/i.test(text.trim());
+}
+
 export class GenesysBrain implements Brain {
   readonly name = "Genesys AVA";
+  /** What the bot said to the warm-up message, for genesys:check. */
+  lastWarmUpReply: string | undefined;
   private socket: WebSocket | null = null;
   private ready: Promise<WebSocket> | null = null;
   private token = randomUUID();
@@ -80,8 +101,11 @@ export class GenesysBrain implements Brain {
   }
 
   /** A visitor arrived: open their chat now so the first question doesn't wait for it. */
-  prepare(): void {
-    this.connect().catch(() => {}); // the first question reports any failure
+  prepare(): Promise<void> {
+    return this.connect().then(
+      () => {},
+      () => {}, // the first question reports any failure
+    );
   }
 
   async *reply(_history: Turn[], visitorText: string, signal: AbortSignal): AsyncIterable<string> {
@@ -90,6 +114,7 @@ export class GenesysBrain implements Brain {
     let ended = false;
     let failure: Error | undefined;
     let gotText = false;
+    let skippedGreeting: string | undefined;
     let wake: () => void = () => {};
     let quietTimer: NodeJS.Timeout | undefined;
     const finish = (err?: Error) => {
@@ -98,7 +123,15 @@ export class GenesysBrain implements Brain {
       failure = err;
       wake();
     };
-    const replyTimer = setTimeout(() => finish(new GenesysTimeoutError(this.opts.replyTimeoutMs)), this.opts.replyTimeoutMs);
+    const replyTimer = setTimeout(
+      () =>
+        finish(
+          skippedGreeting
+            ? new Error(`the AVA only greeted ("${skippedGreeting}") and never answered; check which bot the Messenger deployment reaches`)
+            : new GenesysTimeoutError(this.opts.replyTimeoutMs),
+        ),
+      this.opts.replyTimeoutMs,
+    );
     const onAbort = () => finish();
     signal.addEventListener("abort", onAbort);
     const onClose = () => finish(gotText ? undefined : new Error("Genesys closed the chat before answering"));
@@ -118,6 +151,11 @@ export class GenesysBrain implements Brain {
       }
       const text = body.text?.trim();
       if (!text) return; // typing indicators, events, buttons without words
+      // A welcome line is not an answer: keep waiting for the real one.
+      if (!gotText && looksLikeGreeting(text) && !isHello(visitorText)) {
+        skippedGreeting = text;
+        return;
+      }
       gotText = true;
       clearTimeout(replyTimer);
       queue.push(text);
@@ -177,9 +215,41 @@ export class GenesysBrain implements Brain {
     this.token = randomUUID();
   }
 
-  /** Opens the socket and starts a guest session, once per visitor. */
+  /**
+   * Starts the bot with a throwaway message and waits out its welcome, so the
+   * visitor's first question gets a real answer and the bot is already running.
+   * Never fails: at worst the first question waits a little longer.
+   */
+  private warmUp(socket: WebSocket): Promise<void> {
+    const text = this.opts.warmUpText ?? "Hello";
+    if (!text) return Promise.resolve();
+    return new Promise<void>((resolve) => {
+      let quiet: NodeJS.Timeout | undefined;
+      const done = () => {
+        clearTimeout(cap);
+        clearTimeout(quiet);
+        this.listeners.delete(listener);
+        resolve();
+      };
+      const cap = setTimeout(done, this.opts.replyTimeoutMs);
+      const listener = (message: Inbound) => {
+        const reply = message.type === "message" && message.body?.direction === "Outbound" ? message.body.text?.trim() : "";
+        if (!reply) return;
+        this.lastWarmUpReply = this.lastWarmUpReply ? `${this.lastWarmUpReply} ${reply}` : reply;
+        clearTimeout(quiet);
+        quiet = setTimeout(done, this.opts.quietMs);
+      };
+      this.lastWarmUpReply = undefined;
+      this.listeners.add(listener);
+      socket.send(JSON.stringify({ action: "onMessage", token: this.token, message: { type: "Text", text } }));
+    });
+  }
+
+  /** Opens the socket, starts a guest session and warms the bot up, once per visitor. */
   private connect(): Promise<WebSocket> {
-    if (this.ready && this.socket?.readyState === WebSocket.OPEN) return this.ready;
+    // Reuse the chat while it is opening or open (prepare() may have started it).
+    const state = this.socket?.readyState;
+    if (this.ready && (state === WebSocket.CONNECTING || state === WebSocket.OPEN)) return this.ready;
     const { region, deploymentId, origin, url, replyTimeoutMs } = this.opts;
     const socket = new WebSocket(url ?? webMessagingUrl(region, deploymentId), origin ? { origin } : undefined);
     this.socket = socket;
@@ -236,7 +306,7 @@ export class GenesysBrain implements Brain {
             this.ready = null;
           }
         });
-        resolve(socket);
+        this.warmUp(socket).then(() => resolve(socket));
       };
       socket.on("message", onSession);
     });

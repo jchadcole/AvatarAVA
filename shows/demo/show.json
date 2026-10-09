@@ -13,7 +13,8 @@
     "deploymentId": "",
     "origin": "",
     "replyTimeoutMs": 7000,
-    "waitForScreening": false
+    "waitForScreening": false,
+    "warmUpText": "Hello"
   },
   "greeting": "Hi, I'm Ava, the Genesys digital host. Ask me anything about Genesys Cloud and our AI for customer experience.",
   "suggestedQuestions": [

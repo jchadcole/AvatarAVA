@@ -25,6 +25,12 @@ export interface GenesysOptions {
   replyTimeoutMs: number;
   /** How long the AVA may go quiet before its reply counts as finished. */
   quietMs: number;
+  /**
+   * Hold each question until the input classifier passes it (slower, but a
+   * flagged question never reaches Genesys). Off: the question goes at once,
+   * and a flagged one is still never spoken.
+   */
+  waitForScreening?: boolean;
   /** Test hook: connect here instead of the region's Web Messaging address. */
   url?: string;
   /** Sees every message Genesys sends, for genesys:check. */
@@ -62,14 +68,21 @@ type Inbound = {
 
 export class GenesysBrain implements Brain {
   readonly name = "Genesys AVA";
-  /** Genesys keeps the conversation, so screen questions before they leave the booth. */
-  readonly screenFirst = true;
   private socket: WebSocket | null = null;
   private ready: Promise<WebSocket> | null = null;
   private token = randomUUID();
   private listeners = new Set<(message: Inbound) => void>();
 
   constructor(private readonly opts: GenesysOptions) {}
+
+  get screenFirst(): boolean {
+    return this.opts.waitForScreening ?? false;
+  }
+
+  /** A visitor arrived: open their chat now so the first question doesn't wait for it. */
+  prepare(): void {
+    this.connect().catch(() => {}); // the first question reports any failure
+  }
 
   async *reply(_history: Turn[], visitorText: string, signal: AbortSignal): AsyncIterable<string> {
     const socket = await this.connect();
@@ -136,6 +149,9 @@ export class GenesysBrain implements Brain {
       signal.removeEventListener("abort", onAbort);
       socket.off("close", onClose);
       this.listeners.delete(listener);
+      // Cut off mid-answer: the rest of it would arrive during the next
+      // question and be spoken as its answer, so start a fresh chat.
+      if (signal.aborted) this.endVisit();
     }
   }
 
@@ -175,6 +191,8 @@ export class GenesysBrain implements Brain {
         return;
       }
       this.opts.onRaw?.(message);
+      // A finished visitor's chat may still be talking while it closes.
+      if (socket !== this.socket) return;
       for (const listener of this.listeners) listener(message);
     });
     socket.on("error", () => {}); // surfaced through close and the timeouts
@@ -240,13 +258,17 @@ export class FallbackBrain implements Brain {
   lastNote: string | undefined;
 
   constructor(
-    private readonly primary: Brain & { name: string; screenFirst?: boolean; endVisit?(): void },
+    private readonly primary: Brain & { name: string },
     private readonly backup: Brain,
     private readonly backupName: string,
   ) {}
 
   get screenFirst(): boolean {
     return this.primary.screenFirst ?? false;
+  }
+
+  prepare(): void {
+    this.primary.prepare?.();
   }
 
   async *reply(history: Turn[], visitorText: string, signal: AbortSignal): AsyncIterable<string> {

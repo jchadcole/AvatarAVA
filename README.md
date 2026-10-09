@@ -76,7 +76,7 @@ Copy `shows/demo` to `shows/<your-show>` and edit:
 A show can take its answers from a Genesys Cloud Agentic Virtual Agent (AVA) instead of Claude. Everything else stays the same: Deepgram listens, our guardrails screen the question and every sentence of the answer, and ElevenLabs and LiveAvatar speak it.
 
 - The server opens a guest chat on a Genesys **Web Messaging** deployment for each visitor and sends the screened question. The deployment's inbound message flow hands it to a digital bot flow that calls the AVA, and the AVA's reply comes back on the same chat. When the visit ends, the chat is dropped and the next visitor gets a new one.
-- Questions only go to Genesys after the safety classifier passes them (up to 4 seconds), so a flagged question never leaves the booth.
+- The visitor's chat opens when they tap Start, and each question goes to Genesys at once, while the safety classifier checks it. A flagged question is never answered aloud (Ava says her deflection line instead), but Genesys does see it. Set `"waitForScreening": true` to hold every question until the classifier passes it, so flagged questions never leave the booth; that adds 1-3 seconds per answer.
 - If the AVA has not started answering within `replyTimeoutMs` (default 7 seconds), or Genesys errors, Claude answers that turn instead. The backstage screen shows which brain answered.
 - The AVA's replies arrive as whole chat messages rather than word by word, so expect Ava to start talking later than with Claude.
 
@@ -88,7 +88,8 @@ To turn it on, set this in `shows/<show>/show.json` (or `AVA_BRAIN`, `GENESYS_RE
   "region": "mypurecloud.com",
   "deploymentId": "<Messenger deployment ID>",
   "origin": "",
-  "replyTimeoutMs": 7000
+  "replyTimeoutMs": 7000,
+  "waitForScreening": false
 }
 ```
 

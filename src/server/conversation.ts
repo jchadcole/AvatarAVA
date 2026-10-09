@@ -61,6 +61,7 @@ export class Conversation {
 
   async greet(): Promise<void> {
     this.insight({ type: "visit", event: "start" });
+    this.deps.brain.prepare?.();
     await this.sayLine(this.deps.show.greeting);
     this.armIdleTimer();
   }

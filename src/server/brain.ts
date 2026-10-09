@@ -19,6 +19,8 @@ export interface Brain {
   readonly lastAnsweredBy?: string;
   /** Why the backup answered the last turn, when it did. */
   readonly lastNote?: string;
+  /** A visitor arrived; get ready for their first question. */
+  prepare?(): void;
   /** The visitor left; forget anything kept for them. */
   endVisit?(): void;
 }

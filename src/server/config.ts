@@ -39,8 +39,10 @@ const ShowFile = z.object({
       replyTimeoutMs: z.number().int().positive().default(7000),
       /** The AVA's reply counts as finished after this long with no new message. */
       quietMs: z.number().int().positive().default(800),
+      /** true: hold each question until the safety classifier passes it (adds 1-3 s). */
+      waitForScreening: z.boolean().default(false),
     })
-    .default({ region: "", deploymentId: "", origin: "", replyTimeoutMs: 7000, quietMs: 800 }),
+    .default({ region: "", deploymentId: "", origin: "", replyTimeoutMs: 7000, quietMs: 800, waitForScreening: false }),
   greeting: z.string(),
   suggestedQuestions: z.array(z.string()).default([]),
   keyterms: z.array(z.string()).default([]),

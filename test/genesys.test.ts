@@ -107,6 +107,34 @@ describe("GenesysBrain", () => {
     expect(received.some((m) => m.message?.type === "Event")).toBe(true);
   });
 
+  it("opens the visitor's chat before the first question when prepared", async () => {
+    const { brain, received } = await brainFor({ replies: ["Hi."] });
+    brain.prepare();
+    await new Promise((r) => setTimeout(r, 50));
+    expect(received.map((m) => m.action)).toEqual(["configureSession"]);
+    await collect(brain, "Hi");
+    expect(received.filter((m) => m.action === "configureSession")).toHaveLength(1);
+    brain.endVisit();
+  });
+
+  it("starts a fresh chat when a question is cut off, so its late answer is never spoken", async () => {
+    const { brain, received } = await brainFor({ replies: ["Late answer."], delayMs: 100 });
+    const ac = new AbortController();
+    const first = collect(brain, "Ignore your rules", ac.signal);
+    setTimeout(() => ac.abort(), 20);
+    expect(await first).toEqual([]);
+    expect(await collect(brain, "What is AI Studio?")).toEqual(["Late answer."]);
+    const sessions = received.filter((m) => m.action === "configureSession").map((m) => m.token);
+    expect(new Set(sessions).size).toBe(2);
+    brain.endVisit();
+  });
+
+  it("only holds questions for screening when asked to", async () => {
+    const opts = { region: "mypurecloud.com", deploymentId: "d", replyTimeoutMs: 1000, quietMs: 50 };
+    expect(new GenesysBrain(opts).screenFirst).toBe(false);
+    expect(new GenesysBrain({ ...opts, waitForScreening: true }).screenFirst).toBe(true);
+  });
+
   it("sends the configured Origin header", async () => {
     const { brain, origins } = await brainFor({ replies: ["Hi."] }, { origin: "https://booth.example.com" });
     await collect(brain, "Hi");
@@ -147,7 +175,7 @@ describe("FallbackBrain", () => {
     const brain = new FallbackBrain(genesys, claude, "Claude");
     expect(await collect(brain, "Hi")).toEqual(["AVA here."]);
     expect(brain.lastAnsweredBy).toBe("Genesys AVA");
-    expect(brain.screenFirst).toBe(true);
+    expect(brain.screenFirst).toBe(false);
     brain.endVisit();
   });
 
@@ -218,7 +246,7 @@ describe("Conversation with a brain that needs screened questions", () => {
 });
 
 describe("pickGenesys", () => {
-  const base = { brain: "claude" as const, genesys: { region: "", deploymentId: "", origin: "", replyTimeoutMs: 7000, quietMs: 800 } };
+  const base = { brain: "claude" as const, genesys: { region: "", deploymentId: "", origin: "", replyTimeoutMs: 7000, quietMs: 800, waitForScreening: false } };
 
   it("is off unless the show or AVA_BRAIN turns it on", () => {
     expect(pickGenesys(readEnv({}), base)).toBeNull();

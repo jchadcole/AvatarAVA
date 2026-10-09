@@ -296,7 +296,19 @@ export class Conversation {
     const voices = [...this.turnVoices];
     const brain = canned ? undefined : this.deps.brain.lastAnsweredBy;
     const brainNote = canned ? undefined : this.deps.brain.lastNote;
-    this.insight({ type: "answer", text, canned, firstSentenceMs, totalMs: Date.now() - startedAt, sources, voices, brain, brainNote });
+    const brainMs = canned ? undefined : this.deps.brain.lastReplyMs;
+    this.insight({
+      type: "answer",
+      text,
+      canned,
+      firstSentenceMs,
+      totalMs: Date.now() - startedAt,
+      sources,
+      voices,
+      brain,
+      brainNote,
+      brainMs,
+    });
   }
 
   private insight(insight: Insight): void {

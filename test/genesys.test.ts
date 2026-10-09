@@ -206,6 +206,7 @@ describe("FallbackBrain", () => {
     const brain = new FallbackBrain(genesys, claude, "Claude");
     expect(await collect(brain, "Hi")).toEqual(["AVA here."]);
     expect(brain.lastAnsweredBy).toBe("Genesys AVA");
+    expect(brain.lastReplyMs).toBeGreaterThanOrEqual(0);
     expect(brain.screenFirst).toBe(false);
     brain.endVisit();
   });

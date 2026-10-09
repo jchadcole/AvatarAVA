@@ -14,7 +14,7 @@ const STAGE_NAMES = {
 
 const LABEL_NAMES: Record<string, string> = {
   normal: "on topic",
-  off_topic: "off topic, redirected",
+  off_topic: "off topic",
   abusive: "abusive",
   injection: "tried to rewrite the rules",
   empty: "nothing heard",
@@ -94,7 +94,11 @@ function render(insight: StampedInsight): void {
         );
       }
       if (insight.brain) {
-        const why = insight.brainNote ? ` because ${insight.brainNote}` : "";
+        const why = insight.brainNote
+          ? ` because ${insight.brainNote}`
+          : insight.brainMs !== undefined
+            ? ` · first words after ${seconds(insight.brainMs)}`
+            : "";
         meta.append(element("span", insight.brain.includes("backup") ? "backup-voice" : "", `Brain: ${insight.brain}${why}`));
       }
       for (const voice of insight.voices) {

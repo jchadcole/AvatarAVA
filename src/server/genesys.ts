@@ -87,6 +87,8 @@ function isHello(text: string): boolean {
 
 export class GenesysBrain implements Brain {
   readonly name = "Genesys AVA";
+  /** How long the AVA took to send its first words, from when the question was sent. */
+  lastReplyMs: number | undefined;
   /** What the bot said to the warm-up message, for genesys:check. */
   lastWarmUpReply: string | undefined;
   private socket: WebSocket | null = null;
@@ -115,6 +117,8 @@ export class GenesysBrain implements Brain {
     let failure: Error | undefined;
     let gotText = false;
     let skippedGreeting: string | undefined;
+    this.lastReplyMs = undefined;
+    let sentAt = Date.now();
     let wake: () => void = () => {};
     let quietTimer: NodeJS.Timeout | undefined;
     const finish = (err?: Error) => {
@@ -156,6 +160,7 @@ export class GenesysBrain implements Brain {
         skippedGreeting = text;
         return;
       }
+      if (!gotText) this.lastReplyMs = Date.now() - sentAt;
       gotText = true;
       clearTimeout(replyTimer);
       queue.push(text);
@@ -166,6 +171,7 @@ export class GenesysBrain implements Brain {
     this.listeners.add(listener);
 
     try {
+      sentAt = Date.now();
       socket.send(
         JSON.stringify({ action: "onMessage", token: this.token, message: { type: "Text", text: visitorText } }),
       );
@@ -318,6 +324,10 @@ export class FallbackBrain implements Brain {
   /** Why the backup answered the last turn, when it did. */
   lastNote: string | undefined;
 
+  get lastReplyMs(): number | undefined {
+    return this.lastAnsweredBy === this.primary.name ? this.primary.lastReplyMs : undefined;
+  }
+
   constructor(
     private readonly primary: Brain & { name: string },
     private readonly backup: Brain,
@@ -342,7 +352,10 @@ export class FallbackBrain implements Brain {
         spoke = true;
         yield sentence;
       }
-      if (spoke) console.log(`BRAIN: ${this.primary.name} answered in ${((Date.now() - started) / 1000).toFixed(1)} s.`);
+      if (spoke) {
+        const ms = this.primary.lastReplyMs ?? Date.now() - started;
+        console.log(`BRAIN: ${this.primary.name}'s first words arrived ${(ms / 1000).toFixed(1)} s after the question.`);
+      }
       if (spoke || signal.aborted) return;
       this.lastNote = `${this.primary.name} sent no words`;
       console.warn(`BRAIN: ${this.lastNote}, so ${this.backupName} answered.`);

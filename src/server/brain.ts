@@ -19,6 +19,8 @@ export interface Brain {
   readonly lastAnsweredBy?: string;
   /** Why the backup answered the last turn, when it did. */
   readonly lastNote?: string;
+  /** How long the last answer's first words took to arrive, when the brain measures it. */
+  readonly lastReplyMs?: number;
   /** A visitor arrived; get ready for their first question. */
   prepare?(): void;
   /** The visitor left; forget anything kept for them. */

@@ -28,6 +28,8 @@ export type Insight =
       brain?: string;
       /** Why the backup brain answered, e.g. "Genesys AVA did not answer within 7000 ms". */
       brainNote?: string;
+      /** How long the brain took to send its first words (Genesys only). */
+      brainMs?: number;
     };
 
 export type StampedInsight = Insight & { ts: string };

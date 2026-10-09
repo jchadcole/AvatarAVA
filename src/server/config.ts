@@ -25,6 +25,8 @@ const ShowFile = z.object({
   /** ElevenLabs voice ID for the host; used when ELEVENLABS_API_KEY is set. Default: "Brian". */
   elevenLabsVoiceId: z.string().default("nPczCjzI2devNBz1zQrb"),
   language: z.string().default("en"),
+  /** What the booth is about, for the safety classifier. Default: the company, its products, demos and the event. */
+  about: z.string().optional(),
   /** Who writes the answers: "claude" (default) or "genesys" (a Genesys AVA, with Claude as backup). */
   brain: z.enum(["claude", "genesys"]).default("claude"),
   /** Genesys Web Messaging deployment that reaches the AVA; used when brain is "genesys". */

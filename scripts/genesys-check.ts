@@ -56,8 +56,7 @@ try {
     answer.push(sentence);
   }
   if (brain.lastWarmUpReply) {
-    console.log(`\nWarm-up reply (discarded, never spoken): ${brain.lastWarmUpReply}`);
-    console.log("  Is this your booth AVA? If it greets as a different line or company, the Messenger deployment reaches the wrong bot.");
+    console.log(`\nBot's welcome line (sent at Start and skipped, so Ava never says it as an answer): ${brain.lastWarmUpReply}`);
   }
   if (!answer.length) {
     console.log("\nGENESYS CHECK FAILED: the AVA sent no words. Check the bot flow and that the AVA is published.");
@@ -65,7 +64,7 @@ try {
   } else {
     console.log(`\nAVA ANSWER (exactly what Ava would say):\n${answer.join(" ")}\n`);
     if (looksLikeGreeting(answer.join(" "))) {
-      console.log("WARNING: this looks like a greeting, not an answer. Check which bot the Messenger deployment reaches.");
+      console.log("Note: this looks like a welcome line rather than an answer, so the app would let Claude answer instead.");
     }
     console.log(`GENESYS CHECK OK: first words ${first} s after the question, whole answer after ${sinceAsked()} s.`);
     if (Number(first) * 1000 > settings.replyTimeoutMs) {

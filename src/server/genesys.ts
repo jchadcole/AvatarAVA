@@ -127,7 +127,7 @@ export class GenesysBrain implements Brain {
       () =>
         finish(
           skippedGreeting
-            ? new Error(`the AVA only greeted ("${skippedGreeting}") and never answered; check which bot the Messenger deployment reaches`)
+            ? new Error(`the AVA only greeted ("${skippedGreeting}") and never answered`)
             : new GenesysTimeoutError(this.opts.replyTimeoutMs),
         ),
       this.opts.replyTimeoutMs,

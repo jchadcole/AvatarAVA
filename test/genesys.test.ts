@@ -112,7 +112,6 @@ describe("GenesysBrain", () => {
     const sessions = received.filter((m) => m.action === "configureSession").map((m) => m.token);
     expect(sessions).toHaveLength(2);
     expect(sessions[0]).not.toBe(sessions[1]);
-    expect(received.some((m) => m.message?.type === "Event")).toBe(true);
   });
 
   it("opens the visitor's chat before the first question when prepared", async () => {

@@ -198,20 +198,11 @@ export class GenesysBrain implements Brain {
     const socket = this.socket;
     this.socket = null;
     this.ready = null;
-    if (socket && socket.readyState === WebSocket.OPEN) {
-      // Asks Genesys to end the conversation; the new token below is what
-      // actually keeps visitors apart, so this is best effort.
-      socket.send(
-        JSON.stringify({
-          action: "onMessage",
-          token: this.token,
-          message: { type: "Event", events: [{ eventType: "Presence", presence: { type: "Clear" } }] },
-        }),
-      );
-      setTimeout(() => socket.close(), 200);
-    } else {
-      socket?.terminate();
-    }
+    // Closing the socket leaves the Genesys chat to expire on its own (Genesys
+    // rejects a "Clear" presence event here); the new token below is what
+    // keeps visitors apart.
+    if (socket?.readyState === WebSocket.OPEN) socket.close();
+    else socket?.terminate();
     this.token = randomUUID();
   }
 

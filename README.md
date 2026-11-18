@@ -109,6 +109,30 @@ Sandbox mode only allows LiveAvatar's sample avatar. To show your own host:
 
 The avatar's voice comes from ElevenLabs when `ELEVENLABS_API_KEY` is set (`"elevenLabsVoiceId"` in `show.json`, default "Brian"), otherwise from Deepgram (`"voice"`). Pick a voice that suits the person; any voice in your ElevenLabs voice library works, including a licensed clone of the presenter. If ElevenLabs fails or is slow, that line is spoken with the Deepgram voice instead, and after three failures in a row the kiosk stays on Deepgram for a minute before trying again, so the avatar never goes silent.
 
+## Comparing faces: LiveAvatar or Anam
+
+The face is swappable. Both options only draw the avatar and lip-sync it to the audio we send, so the brain, guardrails and ElevenLabs voice stay exactly the same, and a side-by-side test compares the faces alone.
+
+| | LiveAvatar (default) | Anam |
+| --- | --- | --- |
+| Mode | LITE ("Avatar Only") | Audio passthrough |
+| Key | `LIVEAVATAR_API_KEY` | `ANAM_API_KEY` |
+| Avatar | `"avatarId"` in `show.json` | `"anamAvatarId"` in `show.json` |
+
+To try Anam:
+
+1. In [Anam Lab](https://lab.anam.ai), create an API key and pick a stock avatar or create a custom one from footage you have the rights to. Copy its avatar ID.
+2. Put the ID in `"anamAvatarId"` in `shows/<show>/show.json` and `ANAM_API_KEY` in `.env`.
+3. Set `"renderer": "anam"` in `show.json`, or start with `AVA_RENDERER=anam npm start` for a quick comparison. The server log's `FACE:` line says which face is running.
+
+For a fair test, run each face with the same questions and watch for three things: how natural the mouth and head look, how long the first words take after you let go of the button (the backstage screen shows it), and whether cutting in stops the avatar cleanly.
+
+Anam has no "finished speaking" event for passthrough audio, so the kiosk estimates it from the audio length. LiveAvatar's prewarm and sandbox settings don't apply to Anam.
+
+## Licensing for shows
+
+Use a paid ElevenLabs plan for any show or recorded demo. Audio made on the free plan has no commercial rights, even after upgrading, so the server prints a `PLAN CHECK` warning at startup when the key is on the free plan. For a cloned presenter voice, get the presenter's written consent and use ElevenLabs' professional voice cloning on a plan that includes it.
+
 ## Develop
 
 ```bash
@@ -119,6 +143,7 @@ npm run dev       # rebuilds the client, restarts the server on change
 
 ## Known gaps in this pilot
 
+- The Anam face is built from Anam's SDK types and docs but not yet tested against a live Anam account; the cloud test environment can't reach api.anam.ai.
 - Not yet tested end to end against live LiveAvatar and Deepgram accounts. First thing to check: whether sentence-by-sentence `repeatAudio` calls queue cleanly on the avatar or need to be merged into one utterance.
 - Push-to-talk only; hands-free voice detection and camera-based presence come later.
 - No offline mode yet: if the network drops, the page shows a "taking a break" message.

@@ -187,3 +187,34 @@ export class DeepgramStt implements Stt {
     };
   }
 }
+
+/**
+ * Says whether the ElevenLabs account can be used at a show. Audio made on the
+ * free plan carries no commercial rights (even after upgrading), so the booth
+ * needs a paid plan. Returns a line for the startup log.
+ */
+export async function elevenLabsPlanCheck(apiKey: string): Promise<{ ok: boolean; message: string }> {
+  let res: Response;
+  try {
+    res = await fetch("https://api.elevenlabs.io/v1/user/subscription", { headers: { "xi-api-key": apiKey } });
+  } catch (err) {
+    return { ok: false, message: `PLAN CHECK: could not reach ElevenLabs (${(err as Error).message}).` };
+  }
+  if (res.status === 401) {
+    const body = await res.text();
+    return /missing_permissions|permission/i.test(body)
+      ? { ok: true, message: "PLAN CHECK: this ElevenLabs key may not read the plan (needs User read access); check the plan in the ElevenLabs dashboard." }
+      : { ok: false, message: "PLAN CHECK FAILED: ElevenLabs rejected the API key. Create a new key and update ELEVENLABS_API_KEY." };
+  }
+  if (!res.ok) return { ok: false, message: `PLAN CHECK: ElevenLabs answered ${res.status}.` };
+  const sub = (await res.json()) as { tier?: string; character_count?: number; character_limit?: number };
+  const tier = sub.tier ?? "unknown";
+  const used = sub.character_count != null && sub.character_limit ? ` (${sub.character_count} of ${sub.character_limit} characters used this cycle)` : "";
+  if (tier === "free") {
+    return {
+      ok: false,
+      message: `PLAN CHECK: ElevenLabs is on the FREE plan${used}. Free audio can't be used commercially, so upgrade to a paid plan before any show or recorded demo.`,
+    };
+  }
+  return { ok: true, message: `PLAN CHECK: ElevenLabs plan "${tier}"${used}.` };
+}

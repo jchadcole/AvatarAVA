@@ -1,4 +1,4 @@
-import { AgentEventsEnum, LiveAvatarSession, SessionEvent } from "@heygen/liveavatar-web-sdk";
+import { createFace, type Face, type Renderer } from "./faces.ts";
 
 type ServerMessage =
   | { type: "say"; text: string; audio: string }
@@ -17,9 +17,9 @@ const captions = $("captions");
 const suggestions = $("suggestions");
 const sandboxBadge = $("sandbox");
 
-let session: LiveAvatarSession | null = null;
+let session: Face | null = null;
 /** With prewarm on, an avatar session already streaming, ready for the next visit. */
-let spare: LiveAvatarSession | null = null;
+let spare: Face | null = null;
 let warming: Promise<void> | null = null;
 let prewarm = false;
 let socket: WebSocket;
@@ -42,12 +42,13 @@ function send(message: object): void {
 function handle(message: ServerMessage): void {
   switch (message.type) {
     case "say":
-      session?.repeatAudio(message.audio);
+      session?.say(message.audio);
       break;
     case "interrupt":
       session?.interrupt();
       break;
     case "state":
+      if (message.state !== "speaking") session?.endTurn();
       document.body.dataset.state = message.state;
       statusLine.textContent = {
         idle: "Hold the button and ask me anything",
@@ -78,24 +79,22 @@ function showCaption(role: "visitor" | "avatar", text: string): void {
 
 // ---- Avatar session ----------------------------------------------------
 
-async function openSession(): Promise<LiveAvatarSession> {
+async function openSession(): Promise<Face> {
   const res = await fetch("/api/session", { method: "POST" });
   if (!res.ok) throw new Error(await res.text());
-  const { sessionToken } = await res.json();
-  // Mic audio goes to our server for speech-to-text, not into the avatar room.
-  const opened = new LiveAvatarSession(sessionToken, { autoKeepAlive: true, voiceChat: { defaultMuted: true } });
-  opened.on(SessionEvent.SESSION_STREAM_READY, () => opened.attach(video));
-  opened.on(SessionEvent.SESSION_DISCONNECTED, () => {
+  const { renderer, sessionToken } = (await res.json()) as { renderer: Renderer; sessionToken: string };
+  const opened = createFace(renderer, sessionToken);
+  opened.onDisconnected(() => {
     if (opened === session) void endVisit();
     if (opened === spare) {
       spare = null;
       setTimeout(warmUp, 5000);
     }
   });
-  opened.on(AgentEventsEnum.AVATAR_SPEAK_ENDED, () => {
+  opened.onSpeakEnded(() => {
     if (!talking) statusLine.textContent = "Hold the button and ask me anything";
   });
-  await opened.start();
+  await opened.start(video);
   return opened;
 }
 

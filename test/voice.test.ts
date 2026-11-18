@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ElevenLabsTts, FallbackTts, type Tts } from "../src/server/voice.ts";
+import { ElevenLabsTts, elevenLabsPlanCheck, FallbackTts, type Tts } from "../src/server/voice.ts";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -89,5 +89,27 @@ describe("FallbackTts", () => {
     const pending = tts.synthesize("Hi", ac.signal);
     ac.abort();
     await expect(pending).rejects.toThrow("aborted");
+  });
+});
+
+describe("elevenLabsPlanCheck", () => {
+  const reply = (body: unknown, status = 200) =>
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify(body), { status })));
+
+  it("flags the free plan, which has no commercial rights", async () => {
+    reply({ tier: "free", character_count: 9000, character_limit: 10000 });
+    const result = await elevenLabsPlanCheck("key");
+    expect(result.ok).toBe(false);
+    expect(result.message).toMatch(/FREE plan \(9000 of 10000/);
+  });
+
+  it("passes a paid plan", async () => {
+    reply({ tier: "creator" });
+    expect(await elevenLabsPlanCheck("key")).toEqual({ ok: true, message: 'PLAN CHECK: ElevenLabs plan "creator".' });
+  });
+
+  it("says when the key itself is rejected", async () => {
+    reply({ detail: { status: "invalid_api_key" } }, 401);
+    expect((await elevenLabsPlanCheck("key")).message).toMatch(/rejected the API key/);
   });
 });

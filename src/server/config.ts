@@ -20,6 +20,10 @@ const ShowFile = z.object({
   avatarName: z.string(),
   /** LiveAvatar avatar for this show (from the LiveAvatar dashboard). Ignored in sandbox mode. */
   avatarId: z.string().optional(),
+  /** Which hosted face renders the host: "liveavatar" (default) or "anam". Both lip-sync to our own voice. */
+  renderer: z.enum(["liveavatar", "anam"]).default("liveavatar"),
+  /** Anam avatar for this show (from the Anam Lab), used when renderer is "anam". */
+  anamAvatarId: z.string().optional(),
   /** Deepgram Aura voice for the host, e.g. "aura-2-orpheus-en". Also the backup when ElevenLabs is on. */
   voice: z.string().default("aura-2-orpheus-en"),
   /** ElevenLabs voice ID for the host; used when ELEVENLABS_API_KEY is set. Default: "Brian". */
@@ -154,6 +158,11 @@ export interface Env {
    * instant. Uses credits the whole time the page is open; never in sandbox.
    */
   liveAvatarPrewarm: boolean;
+  /** AVA_RENDERER: overrides the show's renderer ("liveavatar" or "anam"). */
+  renderer?: "liveavatar" | "anam";
+  anamApiKey?: string;
+  /** ANAM_AVATAR_ID, an override for the show's anamAvatarId. */
+  anamAvatarId?: string;
   deepgramApiKey?: string;
   deepgramSttModel: string;
   /** DEEPGRAM_TTS_MODEL, an override for the show's voice. */
@@ -186,6 +195,10 @@ export function readEnv(env: NodeJS.ProcessEnv = process.env): Env {
   if (brain && brain !== "claude" && brain !== "genesys") {
     throw new Error(`AVA_BRAIN must be claude or genesys (got "${env.AVA_BRAIN}")`);
   }
+  const renderer = env.AVA_RENDERER?.toLowerCase() || undefined;
+  if (renderer && renderer !== "liveavatar" && renderer !== "anam") {
+    throw new Error(`AVA_RENDERER must be liveavatar or anam (got "${env.AVA_RENDERER}")`);
+  }
   const sandbox = (env.LIVEAVATAR_SANDBOX ?? "true").toLowerCase() !== "false";
   return {
     port: Number(env.PORT ?? 3000),
@@ -200,6 +213,9 @@ export function readEnv(env: NodeJS.ProcessEnv = process.env): Env {
     liveAvatarAvatarId: env.LIVEAVATAR_AVATAR_ID || undefined,
     liveAvatarVideoQuality: quality as Env["liveAvatarVideoQuality"],
     liveAvatarPrewarm: !sandbox && (env.LIVEAVATAR_PREWARM ?? "").toLowerCase() === "true",
+    renderer: renderer as Env["renderer"],
+    anamApiKey: env.ANAM_API_KEY || undefined,
+    anamAvatarId: env.ANAM_AVATAR_ID || undefined,
     deepgramApiKey: env.DEEPGRAM_API_KEY || undefined,
     deepgramSttModel: env.DEEPGRAM_STT_MODEL ?? "nova-3",
     deepgramTtsModel: env.DEEPGRAM_TTS_MODEL || undefined,
@@ -240,4 +256,22 @@ export function pickGenesys(env: Env, show: Pick<ShowConfig, "brain" | "genesys"
     );
   }
   return settings;
+}
+
+export type Renderer = "liveavatar" | "anam";
+
+/** The face to use and its avatar. Environment variables win over show.json. */
+export function pickRenderer(
+  env: Env,
+  show: Pick<ShowConfig, "renderer" | "avatarId" | "anamAvatarId">,
+): { renderer: Renderer; avatarId: string } {
+  const renderer = env.renderer ?? show.renderer;
+  if (renderer === "anam") {
+    if (!env.anamApiKey) throw new Error("ANAM_API_KEY is required when the renderer is anam.");
+    const avatarId = env.anamAvatarId || show.anamAvatarId;
+    if (!avatarId) throw new Error('The Anam face needs an avatar: set "anamAvatarId" in show.json or ANAM_AVATAR_ID.');
+    return { renderer, avatarId };
+  }
+  if (!env.liveAvatarApiKey) throw new Error("LIVEAVATAR_API_KEY is required to start avatar sessions.");
+  return { renderer, avatarId: pickAvatarId(env, show) };
 }

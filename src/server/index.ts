@@ -6,23 +6,26 @@ import Anthropic from "@anthropic-ai/sdk";
 import express from "express";
 import { WebSocketServer } from "ws";
 import { ClaudeBrain, type Brain } from "./brain.ts";
-import { loadShow, pickAvatarId, pickGenesys, readEnv } from "./config.ts";
+import { loadShow, pickGenesys, pickRenderer, readEnv } from "./config.ts";
 import { Conversation, warmLines, type ServerMessage } from "./conversation.ts";
 import { FallbackBrain, GenesysBrain, webMessagingUrl } from "./genesys.ts";
 import { InputClassifier } from "./guardrails.ts";
 import { InsightHub } from "./insights.ts";
+import { createAnamSessionToken } from "./anam.ts";
 import { createLiteSessionToken } from "./liveavatar.ts";
 import { SourceMatcher } from "./sources.ts";
 import { TranscriptLog } from "./transcriptLog.ts";
-import { DeepgramStt, DeepgramTts, ElevenLabsTts, FallbackTts, type Tts } from "./voice.ts";
+import { DeepgramStt, DeepgramTts, ElevenLabsTts, elevenLabsPlanCheck, FallbackTts, type Tts } from "./voice.ts";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const env = readEnv();
 const show = loadShow(path.join(root, "shows"), env.showName);
 
 if (!env.deepgramApiKey) throw new Error("DEEPGRAM_API_KEY is required for speech-to-text and text-to-speech.");
-if (!env.liveAvatarApiKey) throw new Error("LIVEAVATAR_API_KEY is required to start avatar sessions.");
-const avatarId = pickAvatarId(env, show);
+const { renderer, avatarId } = pickRenderer(env, show);
+/** LiveAvatar's sandbox and prewarm settings only apply to the LiveAvatar face. */
+const sandbox = renderer === "liveavatar" && env.liveAvatarSandbox;
+const prewarm = renderer === "liveavatar" && env.liveAvatarPrewarm;
 
 // AVA_ANTHROPIC_API_KEY works where the host reserves ANTHROPIC_API_KEY for itself
 // (Claude cloud environments do); otherwise the SDK reads ANTHROPIC_API_KEY.
@@ -61,6 +64,9 @@ const tts: Tts = fallbackTts ?? deepgramTts;
 const voiceName = fallbackTts
   ? `ElevenLabs ${elevenLabsVoice} (${env.elevenLabsModel}), Deepgram ${deepgramVoice} as backup`
   : `Deepgram ${deepgramVoice} only (no ELEVENLABS_API_KEY)`;
+if (env.elevenLabsApiKey) {
+  void elevenLabsPlanCheck(env.elevenLabsApiKey).then(({ ok, message }) => (ok ? console.log(message) : console.warn(message)));
+}
 const stt = new DeepgramStt(env.deepgramApiKey, env.deepgramSttModel, show.language);
 const log = new TranscriptLog(path.resolve(root, env.logDir));
 const insights = new InsightHub();
@@ -90,21 +96,25 @@ app.get("/api/show", (_req, res) => {
     avatarName: show.avatarName,
     eventName: show.eventName,
     suggestedQuestions: show.suggestedQuestions,
-    sandbox: env.liveAvatarSandbox,
-    prewarm: env.liveAvatarPrewarm,
+    sandbox,
+    prewarm,
+    renderer,
     voice: voiceName,
   });
 });
 
 app.post("/api/session", async (_req, res) => {
   try {
-    const { sessionToken } = await createLiteSessionToken({
-      apiKey: env.liveAvatarApiKey!,
-      avatarId,
-      sandbox: env.liveAvatarSandbox,
-      quality: env.liveAvatarVideoQuality,
-    });
-    res.json({ sessionToken });
+    const { sessionToken } =
+      renderer === "anam"
+        ? await createAnamSessionToken({ apiKey: env.anamApiKey!, avatarId })
+        : await createLiteSessionToken({
+            apiKey: env.liveAvatarApiKey!,
+            avatarId,
+            sandbox: env.liveAvatarSandbox,
+            quality: env.liveAvatarVideoQuality,
+          });
+    res.json({ renderer, sessionToken });
   } catch (err) {
     console.error(err);
     res.status(502).json({ error: "Could not start the avatar session." });
@@ -193,5 +203,9 @@ wss.on("connection", (socket) => {
 server.listen(env.port, () => {
   console.log(`${show.avatarName} kiosk for ${show.eventName} on http://localhost:${env.port}`);
   console.log(`Backstage screen on http://localhost:${env.port}/backstage.html`);
-  console.log(`LiveAvatar ${env.liveAvatarSandbox ? "SANDBOX (free, ~1 minute sessions)" : "LIVE"} mode, avatar ${avatarId}, voice ${voiceName}, model ${env.claudeModel}${env.liveAvatarPrewarm ? ", avatar kept warm between visits" : ""}`);
+  const face =
+    renderer === "anam"
+      ? `FACE: Anam (audio passthrough), avatar ${avatarId}`
+      : `FACE: LiveAvatar ${env.liveAvatarSandbox ? "SANDBOX (free, ~1 minute sessions)" : "LIVE"} mode, avatar ${avatarId}${prewarm ? ", kept warm between visits" : ""}`;
+  console.log(`${face}, voice ${voiceName}, model ${env.claudeModel}`);
 });

@@ -16,6 +16,7 @@
     "genesys:check": "tsx scripts/genesys-check.ts"
   },
   "dependencies": {
+    "@anam-ai/js-sdk": "^4.29.3",
     "@anthropic-ai/sdk": "^0.131.0",
     "@heygen/liveavatar-web-sdk": "^0.0.19",
     "dotenv": "^18.0.6",

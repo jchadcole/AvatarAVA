@@ -24,6 +24,12 @@ export type Insight =
       sources: string[];
       /** Voices that spoke this answer, e.g. ["ElevenLabs"] or ["Deepgram (backup)"]. Empty with one fixed voice. */
       voices: string[];
+      /** Which brain answered when more than one can, e.g. "Genesys AVA" or "Claude (backup)". */
+      brain?: string;
+      /** Why the backup brain answered, e.g. "Genesys AVA did not answer within 7000 ms". */
+      brainNote?: string;
+      /** How long the brain took to send its first words (Genesys only). */
+      brainMs?: number;
     };
 
 export type StampedInsight = Insight & { ts: string };

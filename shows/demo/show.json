@@ -7,6 +7,15 @@
   "voice": "aura-2-orpheus-en",
   "elevenLabsVoiceId": "nPczCjzI2devNBz1zQrb",
   "language": "en",
+  "brain": "claude",
+  "genesys": {
+    "region": "",
+    "deploymentId": "",
+    "origin": "",
+    "replyTimeoutMs": 7000,
+    "waitForScreening": false,
+    "warmUpText": "Hello"
+  },
   "greeting": "Hi, I'm Ava, the Genesys digital host. Ask me anything about Genesys Cloud and our AI for customer experience.",
   "suggestedQuestions": [
     "What is Genesys Cloud?",

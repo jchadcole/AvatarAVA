@@ -4,3 +4,5 @@ logs/*
 !logs/.gitkeep
 public/app.js
 public/app.js.map
+public/backstage.js
+public/backstage.js.map

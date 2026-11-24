@@ -37,6 +37,11 @@ export interface GenesysOptions {
    * first question. Empty: no warm-up.
    */
   warmUpText?: string;
+  /**
+   * When the bot's welcome asks the visitor something (such as their name),
+   * Ava asks it right after her greeting. Default true.
+   */
+  speakOpeningQuestion?: boolean;
   /** Test hook: connect here instead of the region's Web Messaging address. */
   url?: string;
   /** Sees every message Genesys sends, for genesys:check. */
@@ -78,6 +83,19 @@ const OFFER_HELP = /\b(how (can|may) i (help|assist)|what can i (help|do)|help y
 /** A bot's welcome line ("Hello, thanks for contacting... How can I help you today?") rather than an answer. */
 export function looksLikeGreeting(text: string): boolean {
   return GREETING_START.test(text.trim()) && OFFER_HELP.test(text);
+}
+
+/**
+ * The questions in a bot's welcome that the visitor should hear, such as
+ * "May I have your name, please?" from "Hello! I'm AVA... May I have your name,
+ * please?". A plain "How can I help you today?" is left out, since Ava's own
+ * greeting already offers help.
+ */
+export function openingQuestion(welcome: string | undefined): string | undefined {
+  if (!welcome) return undefined;
+  const sentences = welcome.match(/[^.!?]+[.!?]+/g) ?? [welcome];
+  const questions = sentences.map((s) => s.trim()).filter((s) => s.endsWith("?") && !OFFER_HELP.test(s));
+  return questions.length ? questions.join(" ") : undefined;
 }
 
 /** The visitor just said hello, so a greeting back is a fair answer. */
@@ -156,7 +174,9 @@ export class GenesysBrain implements Brain {
       const text = body.text?.trim();
       if (!text) return; // typing indicators, events, buttons without words
       // A welcome line is not an answer: keep waiting for the real one.
-      if (!gotText && looksLikeGreeting(text) && !isHello(visitorText)) {
+      // Skip it only when the warm-up didn't already take the welcome: after
+      // that, "Hi Chad! How can I help?" is a real reply to the visitor.
+      if (!gotText && !this.lastWarmUpReply && looksLikeGreeting(text) && !isHello(visitorText)) {
         skippedGreeting = text;
         return;
       }
@@ -197,6 +217,17 @@ export class GenesysBrain implements Brain {
       // question and be spoken as its answer, so start a fresh chat.
       if (signal.aborted) this.endVisit();
     }
+  }
+
+  /** The question in the bot's welcome, if any, once the warm-up is done. */
+  async opening(): Promise<string | undefined> {
+    if (this.opts.speakOpeningQuestion === false || !this.opts.warmUpText) return undefined;
+    try {
+      await this.connect();
+    } catch {
+      return undefined;
+    }
+    return openingQuestion(this.lastWarmUpReply);
   }
 
   /** The visitor left: drop this chat so the next visitor starts a new one. */
@@ -340,6 +371,10 @@ export class FallbackBrain implements Brain {
 
   prepare(): void {
     this.primary.prepare?.();
+  }
+
+  opening(): Promise<string | undefined> {
+    return this.primary.opening?.() ?? Promise.resolve(undefined);
   }
 
   async *reply(history: Turn[], visitorText: string, signal: AbortSignal): AsyncIterable<string> {

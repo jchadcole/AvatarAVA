@@ -29,6 +29,7 @@ interface ScreenConfig {
   logoText: string;
   subtitle: string;
   videoFit: "cover" | "contain";
+  avatarShare: number;
 }
 
 const IDLE_STATUS = "Hold the button and ask me anything";
@@ -240,6 +241,7 @@ function showHeader(screen: ScreenConfig): void {
   root.setProperty("--wave", screen.waveColor);
   root.setProperty("--bg", screen.backgroundColor);
   video.style.objectFit = screen.videoFit;
+  root.setProperty("--avatar-share", String(screen.avatarShare));
 
   const headline = $("headline");
   const at = screen.accentText ? screen.headline.indexOf(screen.accentText) : -1;

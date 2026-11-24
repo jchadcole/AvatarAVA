@@ -31,6 +31,8 @@ const KioskScreen = z.object({
   logoText: z.string().default(""),
   /** How the avatar video fills its frame: "cover" crops the sides to fill it, "contain" shows the whole video. */
   videoFit: z.enum(["cover", "contain"]).default("cover"),
+  /** Share of the height under the header given to the avatar (0.3 to 0.8); the transcript gets the rest. */
+  avatarShare: z.number().min(0.3).max(0.8).default(0.6),
   /** Smaller line under the headline. "" hides it. */
   subtitle: z.string().default(""),
 });

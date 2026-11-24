@@ -64,6 +64,7 @@
     "logo": "",
     "logoText": "GENESYS",
     "subtitle": "",
-    "videoFit": "cover"
+    "videoFit": "cover",
+    "avatarShare": 0.6
   }
 }

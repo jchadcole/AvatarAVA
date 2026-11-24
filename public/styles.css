@@ -10,7 +10,9 @@
   --muted: #a8b3c4;
   --accent: #ff4f1f;
   --wave: #5468ff;
-  --panel: rgba(10, 20, 38, 0.92);
+  --panel: rgba(255, 255, 255, 0.05);
+  /* Share of the space under the header that the avatar gets; the transcript gets the rest. */
+  --avatar-share: 0.6;
   font-family: "Helvetica Neue", system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 
@@ -97,11 +99,20 @@ body {
 
 /* ---- Avatar ------------------------------------------------------------ */
 
+/* Avatar on top, transcript below: each gets its own space, no overlap. */
 #stage {
   flex: 1;
   min-height: 0;
-  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 3cqw;
   margin: 0 6cqw 6cqw;
+}
+
+#avatar-frame {
+  flex: 0 0 calc(var(--avatar-share) * 100%);
+  min-height: 0;
+  position: relative;
   border-radius: 3cqw;
   overflow: hidden;
   background: linear-gradient(180deg, #dfe3ee, #c9cfdd);
@@ -117,21 +128,16 @@ body {
   object-position: center top;
 }
 
-/* ---- Transcript panel (over the lower part of the avatar) -------------- */
+/* ---- Transcript panel (below the avatar) ------------------------------ */
 
 #panel {
-  position: absolute;
-  left: 4cqw;
-  right: 4cqw;
-  bottom: 4cqw;
-  height: 46%;
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   border-radius: 3cqw;
   background: var(--panel);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  box-shadow: 0 1cqw 4cqw rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   overflow: hidden;
 }
 
@@ -332,7 +338,7 @@ body[data-state="thinking"] #status {
 body[data-state="listening"] #suggestions,
 body[data-state="thinking"] #suggestions,
 body[data-state="speaking"] #suggestions {
-  visibility: hidden;
+  display: none;
 }
 
 /* ---- Staff and sandbox --------------------------------------------------- */

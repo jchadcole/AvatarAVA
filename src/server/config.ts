@@ -49,6 +49,8 @@ const ShowFile = z.object({
       waitForScreening: z.boolean().default(false),
       /** Sent when a visitor taps Start so the bot's welcome message is out of the way; "" turns it off. */
       warmUpText: z.string().default("Hello"),
+      /** Ava asks the question in the bot's welcome (e.g. "May I have your name?") after her greeting. */
+      speakOpeningQuestion: z.boolean().default(true),
     })
     .default({
       region: "",
@@ -58,6 +60,7 @@ const ShowFile = z.object({
       quietMs: 800,
       waitForScreening: false,
       warmUpText: "Hello",
+      speakOpeningQuestion: true,
     }),
   greeting: z.string(),
   suggestedQuestions: z.array(z.string()).default([]),

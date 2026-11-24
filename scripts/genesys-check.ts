@@ -62,6 +62,8 @@ try {
   }
   if (brain.lastWarmUpReply) {
     console.log(`\nBot's welcome line (sent at Start and skipped, so Ava never says it as an answer): ${brain.lastWarmUpReply}`);
+    const opening = await brain.opening();
+    if (opening) console.log(`Ava asks this right after her greeting: ${opening}`);
   }
   if (!answer.length) {
     console.log("\nGENESYS CHECK FAILED: the AVA sent no words. Check the bot flow and that the AVA is published.");

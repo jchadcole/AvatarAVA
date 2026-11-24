@@ -23,6 +23,11 @@ export interface Brain {
   readonly lastReplyMs?: number;
   /** A visitor arrived; get ready for their first question. */
   prepare?(): void;
+  /**
+   * Something to say right after the greeting, such as a bot asking the
+   * visitor's name. Resolves to undefined when there is nothing to add.
+   */
+  opening?(): Promise<string | undefined>;
   /** The visitor left; forget anything kept for them. */
   endVisit?(): void;
 }

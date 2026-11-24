@@ -81,7 +81,7 @@ A show can take its answers from a Genesys Cloud Agentic Virtual Agent (AVA) ins
 - If the AVA has not started answering within `replyTimeoutMs` (default 7 seconds), or Genesys errors, Claude answers that turn instead. The backstage screen shows which brain answered.
 - The AVA's replies arrive as whole chat messages rather than word by word, so expect Ava to start talking later than with Claude.
 
-To turn it on, set this in `shows/<show>/show.json` (or `AVA_BRAIN`, `GENESYS_REGION` and `GENESYS_DEPLOYMENT_ID` in `.env`):
+To turn it on, set this in `shows/<show>/show.json` (or `AVA_BRAIN`, `GENESYS_REGION`, `GENESYS_DEPLOYMENT_ID` and `GENESYS_ORIGIN` in `.env`):
 
 ```json
 "brain": "genesys",

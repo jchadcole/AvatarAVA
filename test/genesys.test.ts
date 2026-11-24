@@ -289,6 +289,13 @@ describe("pickGenesys", () => {
     expect(pickGenesys(env, base)).toMatchObject({ region: "usw2.pure.cloud", deploymentId: "dep-9", replyTimeoutMs: 7000 });
   });
 
+  it("takes the origin from GENESYS_ORIGIN, else keeps the show's", () => {
+    const env = readEnv({ AVA_BRAIN: "genesys", GENESYS_REGION: "mypurecloud.com", GENESYS_DEPLOYMENT_ID: "dep-9", GENESYS_ORIGIN: "https://ava-kiosk.example.com" });
+    expect(pickGenesys(env, base)?.origin).toBe("https://ava-kiosk.example.com");
+    const show = { ...base, genesys: { ...base.genesys, origin: "https://booth.example.com" } };
+    expect(pickGenesys(readEnv({ AVA_BRAIN: "genesys", GENESYS_REGION: "r", GENESYS_DEPLOYMENT_ID: "d" }), show)?.origin).toBe("https://booth.example.com");
+  });
+
   it("says what is missing", () => {
     expect(() => pickGenesys(readEnv({}), { ...base, brain: "genesys" })).toThrow(/region and deploymentId/);
   });

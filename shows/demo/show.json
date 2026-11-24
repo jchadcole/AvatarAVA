@@ -9,11 +9,11 @@
   "voice": "aura-2-orpheus-en",
   "elevenLabsVoiceId": "nPczCjzI2devNBz1zQrb",
   "language": "en",
-  "brain": "claude",
+  "brain": "genesys",
   "genesys": {
-    "region": "",
-    "deploymentId": "",
-    "origin": "",
+    "region": "mypurecloud.com",
+    "deploymentId": "cc7224fb-c07c-4639-92e2-e95df6f3725b",
+    "origin": "https://ava-kiosk.example.com",
     "replyTimeoutMs": 7000,
     "waitForScreening": false,
     "warmUpText": "Hello"

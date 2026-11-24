@@ -33,6 +33,10 @@ const KioskScreen = z.object({
   videoFit: z.enum(["cover", "contain"]).default("cover"),
   /** Share of the height under the header given to the avatar (0.3 to 0.8); the transcript gets the rest. */
   avatarShare: z.number().min(0.3).max(0.8).default(0.6),
+  /** Name shown on the avatar's lines in the transcript. */
+  avaName: z.string().default("{{avatarName}}"),
+  /** Name shown on the visitor's lines in the transcript. */
+  visitorName: z.string().default("You"),
   /** Smaller line under the headline. "" hides it. */
   subtitle: z.string().default(""),
 });

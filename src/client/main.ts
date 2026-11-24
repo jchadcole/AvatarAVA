@@ -30,9 +30,14 @@ interface ScreenConfig {
   subtitle: string;
   videoFit: "cover" | "contain";
   avatarShare: number;
+  avaName: string;
+  visitorName: string;
 }
 
-const IDLE_STATUS = "Hold the button and ask me anything";
+/** Names on the transcript lines, from show.json "screen". */
+const speakerNames = { avatar: "Ava", visitor: "You" };
+
+const IDLE_STATUS = "Hold to talk";
 
 let session: Face | null = null;
 /** With prewarm on, an avatar session already streaming, ready for the next visit. */
@@ -119,7 +124,7 @@ class Transcript {
 
   /** Removes words that were never confirmed (nothing was heard). */
   dropPartial(): void {
-    this.partial?.remove();
+    this.partial?.parentElement?.remove();
     this.partial = null;
   }
 
@@ -180,10 +185,17 @@ class Transcript {
     this.reply.textContent = this.reply.textContent ? `${this.reply.textContent} ${word}` : word;
   }
 
+  /** Adds a chat message with the speaker's name; returns the element for its text. */
   private line(role: "visitor" | "avatar"): HTMLParagraphElement {
+    const message = document.createElement("div");
+    message.className = `message ${role}`;
+    const name = document.createElement("span");
+    name.className = "name";
+    name.textContent = speakerNames[role];
     const p = document.createElement("p");
     p.className = role;
-    captions.append(p);
+    message.append(name, p);
+    captions.append(message);
     // Keep the whole visit, but not without limit.
     while (captions.children.length > 60) captions.firstElementChild?.remove();
     return p;
@@ -242,6 +254,8 @@ function showHeader(screen: ScreenConfig): void {
   root.setProperty("--bg", screen.backgroundColor);
   video.style.objectFit = screen.videoFit;
   root.setProperty("--avatar-share", String(screen.avatarShare));
+  speakerNames.avatar = screen.avaName;
+  speakerNames.visitor = screen.visitorName;
 
   const headline = $("headline");
   const at = screen.accentText ? screen.headline.indexOf(screen.accentText) : -1;

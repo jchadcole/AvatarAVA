@@ -65,6 +65,8 @@
     "logoText": "GENESYS",
     "subtitle": "",
     "videoFit": "cover",
-    "avatarShare": 0.6
+    "avatarShare": 0.6,
+    "avaName": "AVA",
+    "visitorName": "You"
   }
 }

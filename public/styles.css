@@ -179,7 +179,7 @@ button {
   min-height: 0;
   display: none;
   flex-direction: column;
-  padding: 5cqw 6cqw 4cqw;
+  padding: 4cqw 5cqw 3cqw;
   gap: 2cqw;
 }
 
@@ -193,15 +193,16 @@ body.in-visit #attract {
 
 /* Live transcript: newest line at the bottom, older lines fade out at the top. */
 #captions {
+  order: -2;
   flex: 1;
   min-height: 0;
   overflow-y: auto;
   scrollbar-width: none;
   display: flex;
   flex-direction: column;
-  gap: 2.4cqw;
-  font-size: 4.6cqw;
-  line-height: 1.35;
+  gap: 2.2cqw;
+  font-size: 3.3cqw;
+  line-height: 1.4;
   mask-image: linear-gradient(to bottom, transparent 0, #000 22%);
   -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 22%);
 }
@@ -216,21 +217,36 @@ body.in-visit #attract {
   flex: 1;
 }
 
-#captions p {
-  margin: 0;
-  max-width: 92%;
+/* Chat messages: a colored name above each speaker's words. */
+#captions .message {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4cqw;
 }
 
-#captions .avatar {
-  align-self: flex-start;
+#captions .name {
+  font-size: 2.6cqw;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+#captions .message.avatar .name {
+  color: var(--accent);
+}
+
+#captions .message.visitor .name {
+  color: var(--wave);
+  filter: brightness(1.4);
+}
+
+#captions p {
+  margin: 0;
   color: var(--ink);
 }
 
-#captions .visitor {
-  align-self: flex-end;
-  text-align: right;
-  font-size: 4cqw;
-  color: #c9d6ff;
+#captions p.visitor {
+  color: #d5dcea;
 }
 
 #captions .visitor.partial {
@@ -243,30 +259,31 @@ body.in-visit #attract {
 
 /* ---- Talk button, status, waveform -------------------------------------- */
 
+/* A slim bar at the bottom of the panel: mic button, status, sound wave. */
 #controls {
   flex: none;
-  display: grid;
-  grid-template-columns: auto 1fr;
-  grid-template-rows: auto auto;
+  display: flex;
   align-items: center;
-  column-gap: 4cqw;
+  gap: 2.5cqw;
+  padding-top: 2cqw;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 #talk {
-  grid-row: 1 / span 2;
-  width: 15cqw;
-  height: 15cqw;
+  flex: none;
+  width: 7cqw;
+  height: 7cqw;
   display: grid;
   place-items: center;
   background: rgba(255, 255, 255, 0.06);
-  border: 0.6cqw solid var(--accent);
+  border: 0.4cqw solid var(--accent);
   touch-action: none;
   transition: transform 0.15s;
 }
 
 #talk .dot {
-  width: 6cqw;
-  height: 6cqw;
+  width: 2.8cqw;
+  height: 2.8cqw;
   border-radius: 50%;
   background: var(--accent);
 }
@@ -276,15 +293,17 @@ body.in-visit #attract {
 }
 
 #status {
+  flex: none;
   margin: 0;
-  min-height: 1.3em;
-  font-size: 3.6cqw;
+  font-size: 2.6cqw;
   color: var(--muted);
+  white-space: nowrap;
 }
 
 #wave {
-  width: 100%;
-  height: 8cqw;
+  flex: 1;
+  min-width: 0;
+  height: 4cqw;
 }
 
 @keyframes ring {
@@ -292,7 +311,7 @@ body.in-visit #attract {
     box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 60%, transparent);
   }
   100% {
-    box-shadow: 0 0 0 4cqw transparent;
+    box-shadow: 0 0 0 2cqw transparent;
   }
 }
 
@@ -317,6 +336,7 @@ body[data-state="thinking"] #status {
 
 /* Suggested questions: shown while nobody is talking. */
 #suggestions {
+  order: -1; /* above the slim control bar, below the transcript */
   flex: none;
   display: flex;
   gap: 2cqw;
@@ -331,8 +351,8 @@ body[data-state="thinking"] #status {
 #suggestions button {
   flex: none;
   background: rgba(255, 255, 255, 0.1);
-  font-size: 3cqw;
-  padding: 1.8cqw 3.6cqw;
+  font-size: 2.6cqw;
+  padding: 1.4cqw 3cqw;
 }
 
 body[data-state="listening"] #suggestions,

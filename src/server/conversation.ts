@@ -62,7 +62,14 @@ export class Conversation {
   async greet(): Promise<void> {
     this.insight({ type: "visit", event: "start" });
     this.deps.brain.prepare?.();
+    const visit = this.visit;
     await this.sayLine(this.deps.show.greeting);
+    // The brain may want to ask something first, such as the visitor's name.
+    const opening = await this.deps.brain.opening?.().catch(() => undefined);
+    // Only if the visitor hasn't started talking or left in the meantime.
+    if (opening && visit === this.visit && !this.turn && !this.listening) {
+      await this.sayLine(opening);
+    }
     this.armIdleTimer();
   }
 

@@ -5,7 +5,7 @@ import { WebSocketServer } from "ws";
 import type { Brain } from "../src/server/brain.ts";
 import { loadShow, pickGenesys, readEnv } from "../src/server/config.ts";
 import { Conversation, type ServerMessage } from "../src/server/conversation.ts";
-import { FallbackBrain, GenesysBrain, GenesysTimeoutError, looksLikeGreeting, webMessagingUrl } from "../src/server/genesys.ts";
+import { FallbackBrain, GenesysBrain, GenesysTimeoutError, looksLikeGreeting, openingQuestion, webMessagingUrl } from "../src/server/genesys.ts";
 import type { Insight } from "../src/server/insights.ts";
 
 /**
@@ -152,6 +152,30 @@ describe("GenesysBrain", () => {
     brain.endVisit();
   });
 
+  it("passes on the question in the bot's welcome and keeps personal replies", async () => {
+    const greeting = "Hello! I'm AVA, your Genesys Cloud virtual assistant. May I have your name, please?";
+    const { brain } = await brainFor({ greeting, replies: ["Hi Chad! How can I help you today?"] }, { warmUpText: "Hello" });
+    brain.prepare();
+    expect(await brain.opening()).toBe("May I have your name, please?");
+    // After the warm-up took the welcome, a greeting-shaped reply is a real answer.
+    expect(await collect(brain, "My name is Chad")).toEqual(["Hi Chad! How can I help you today?"]);
+    brain.endVisit();
+  });
+
+  it("has nothing to add when the welcome only offers help", async () => {
+    const greeting = "Hello, thanks for contacting the booth line. How can I help you today?";
+    const { brain } = await brainFor({ greeting }, { warmUpText: "Hello" });
+    expect(await brain.opening()).toBeUndefined();
+    brain.endVisit();
+  });
+
+  it("finds the questions worth asking in a welcome", () => {
+    expect(openingQuestion("Hello! I'm AVA. May I have your name, please?")).toBe("May I have your name, please?");
+    expect(openingQuestion("Hi there. How can I help you today?")).toBeUndefined();
+    expect(openingQuestion("Welcome to the booth.")).toBeUndefined();
+    expect(openingQuestion(undefined)).toBeUndefined();
+  });
+
   it("says plainly when the bot only greets and never answers", async () => {
     const greeting = "Hello, thanks for contacting the CDC Dog Importation line. How can I help you today?";
     const { brain } = await brainFor({ greeting }, { replyTimeoutMs: 300 });
@@ -277,8 +301,34 @@ describe("Conversation with a brain that needs screened questions", () => {
   });
 });
 
+describe("Conversation start", () => {
+  const show = loadShow(path.resolve("shows"), "demo");
+
+  it("asks the brain's opening question right after the greeting", async () => {
+    const sent: ServerMessage[] = [];
+    const brain: Brain = {
+      async *reply() {
+        yield "unused";
+      },
+      opening: async () => "May I have your name, please?",
+    };
+    const conversation = new Conversation({
+      show,
+      brain,
+      classifier: { classify: async () => "normal" },
+      tts: { synthesize: async (text) => Buffer.from(text) },
+      log: { write: () => {} },
+      send: (m) => sent.push(m),
+      kioskId: "test",
+    });
+    await conversation.greet();
+    expect(sent.flatMap((m) => (m.type === "say" ? [m.text] : []))).toEqual([show.greeting, "May I have your name, please?"]);
+    conversation.endVisit("idle");
+  });
+});
+
 describe("pickGenesys", () => {
-  const base = { brain: "claude" as const, genesys: { region: "", deploymentId: "", origin: "", replyTimeoutMs: 7000, quietMs: 800, waitForScreening: false, warmUpText: "Hello" } };
+  const base = { brain: "claude" as const, genesys: { region: "", deploymentId: "", origin: "", replyTimeoutMs: 7000, quietMs: 800, waitForScreening: false, warmUpText: "Hello", speakOpeningQuestion: true } };
 
   it("is off unless the show or AVA_BRAIN turns it on", () => {
     expect(pickGenesys(readEnv({}), base)).toBeNull();
@@ -287,6 +337,13 @@ describe("pickGenesys", () => {
   it("takes the deployment from the environment over show.json", () => {
     const env = readEnv({ AVA_BRAIN: "genesys", GENESYS_REGION: "usw2.pure.cloud", GENESYS_DEPLOYMENT_ID: "dep-9" });
     expect(pickGenesys(env, base)).toMatchObject({ region: "usw2.pure.cloud", deploymentId: "dep-9", replyTimeoutMs: 7000 });
+  });
+
+  it("takes the origin from GENESYS_ORIGIN, else keeps the show's", () => {
+    const env = readEnv({ AVA_BRAIN: "genesys", GENESYS_REGION: "mypurecloud.com", GENESYS_DEPLOYMENT_ID: "dep-9", GENESYS_ORIGIN: "https://ava-kiosk.example.com" });
+    expect(pickGenesys(env, base)?.origin).toBe("https://ava-kiosk.example.com");
+    const show = { ...base, genesys: { ...base.genesys, origin: "https://booth.example.com" } };
+    expect(pickGenesys(readEnv({ AVA_BRAIN: "genesys", GENESYS_REGION: "r", GENESYS_DEPLOYMENT_ID: "d" }), show)?.origin).toBe("https://booth.example.com");
   });
 
   it("says what is missing", () => {

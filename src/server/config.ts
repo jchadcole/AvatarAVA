@@ -49,6 +49,8 @@ const ShowFile = z.object({
       waitForScreening: z.boolean().default(false),
       /** Sent when a visitor taps Start so the bot's welcome message is out of the way; "" turns it off. */
       warmUpText: z.string().default("Hello"),
+      /** Ava asks the question in the bot's welcome (e.g. "May I have your name?") after her greeting. */
+      speakOpeningQuestion: z.boolean().default(true),
     })
     .default({
       region: "",
@@ -58,6 +60,7 @@ const ShowFile = z.object({
       quietMs: 800,
       waitForScreening: false,
       warmUpText: "Hello",
+      speakOpeningQuestion: true,
     }),
   greeting: z.string(),
   suggestedQuestions: z.array(z.string()).default([]),
@@ -174,9 +177,10 @@ export interface Env {
   elevenLabsModel: string;
   /** AVA_BRAIN: overrides the show's brain ("claude" or "genesys"). */
   brain?: "claude" | "genesys";
-  /** GENESYS_REGION and GENESYS_DEPLOYMENT_ID: override the show's genesys settings. */
+  /** GENESYS_REGION, GENESYS_DEPLOYMENT_ID and GENESYS_ORIGIN: override the show's genesys settings. */
   genesysRegion?: string;
   genesysDeploymentId?: string;
+  genesysOrigin?: string;
 }
 
 /** The only avatar LiveAvatar allows in sandbox mode ("Wayne"). */
@@ -225,6 +229,7 @@ export function readEnv(env: NodeJS.ProcessEnv = process.env): Env {
     brain: brain as Env["brain"],
     genesysRegion: env.GENESYS_REGION || undefined,
     genesysDeploymentId: env.GENESYS_DEPLOYMENT_ID || undefined,
+    genesysOrigin: env.GENESYS_ORIGIN || undefined,
   };
 }
 
@@ -249,6 +254,7 @@ export function pickGenesys(env: Env, show: Pick<ShowConfig, "brain" | "genesys"
     ...show.genesys,
     region: env.genesysRegion || show.genesys.region,
     deploymentId: env.genesysDeploymentId || show.genesys.deploymentId,
+    origin: env.genesysOrigin || show.genesys.origin,
   };
   if (!settings.region || !settings.deploymentId) {
     throw new Error(

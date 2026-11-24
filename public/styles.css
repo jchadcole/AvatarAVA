@@ -217,15 +217,27 @@ body.in-visit #attract {
   flex: 1;
 }
 
-/* Chat messages: a colored name above each speaker's words. */
+/* Chat bubbles, like a phone messages app: Ava on the left, the visitor on the right. */
 #captions .message {
   display: flex;
   flex-direction: column;
-  gap: 0.4cqw;
+  gap: 0.6cqw;
+  max-width: 78%;
+}
+
+#captions .message.avatar {
+  align-self: flex-start;
+  align-items: flex-start;
+}
+
+#captions .message.visitor {
+  align-self: flex-end;
+  align-items: flex-end;
 }
 
 #captions .name {
-  font-size: 2.6cqw;
+  padding: 0 2cqw;
+  font-size: 2.4cqw;
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -236,17 +248,25 @@ body.in-visit #attract {
 }
 
 #captions .message.visitor .name {
-  color: var(--wave);
-  filter: brightness(1.4);
+  color: #7fb4ff;
 }
 
 #captions p {
   margin: 0;
+  padding: 1.6cqw 3cqw;
+  border-radius: 4cqw;
+}
+
+#captions p.avatar {
   color: var(--ink);
+  background: rgba(255, 255, 255, 0.13);
+  border-bottom-left-radius: 1cqw;
 }
 
 #captions p.visitor {
-  color: #d5dcea;
+  color: #fff;
+  background: #0a7cff;
+  border-bottom-right-radius: 1cqw;
 }
 
 #captions .visitor.partial {

@@ -25,6 +25,11 @@ console.log(
     : `npm start will answer with: CLAUDE, not the AVA. Set "brain": "genesys" in shows/${env.showName}/show.json to use the AVA.`,
 );
 console.log(`Connecting to ${webMessagingUrl(settings.region, settings.deploymentId)}`);
+console.log(
+  settings.origin
+    ? `Origin header: ${settings.origin}`
+    : "Origin header: none (set GENESYS_ORIGIN if the deployment restricts domains, or Genesys answers 403)",
+);
 if (settings.warmUpText) console.log(`Warm-up: sending "${settings.warmUpText}" first, as the app does when a visitor taps Start.`);
 console.log(`Asking: ${question}\n`);
 
@@ -72,7 +77,14 @@ try {
     }
   }
 } catch (err) {
-  console.log(`\nGENESYS CHECK FAILED: ${err instanceof Error ? err.message : err}`);
+  const message = err instanceof Error ? err.message : String(err);
+  console.log(`\nGENESYS CHECK FAILED: ${message}`);
+  if (/\b403\b/.test(message)) {
+    console.log(
+      "Genesys refused the connection. Usually the Origin header is missing or not one of the deployment's allowed domains,\n" +
+        "or the deployment is not active. Check GENESYS_ORIGIN against Admin > Messenger Deployments > Restrict domain access.",
+    );
+  }
   process.exitCode = 1;
 } finally {
   brain.endVisit();

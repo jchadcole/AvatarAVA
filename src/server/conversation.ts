@@ -12,6 +12,8 @@ export type ServerMessage =
   | { type: "interrupt" }
   | { type: "state"; state: "idle" | "listening" | "thinking" | "speaking" }
   | { type: "caption"; role: "visitor" | "avatar"; text: string }
+  /** The visitor's words so far, while they are still talking; the final caption replaces it. */
+  | { type: "caption_partial"; role: "visitor"; text: string }
   | { type: "end_visit"; reason: "idle" | "strikes" | "staff" };
 
 export interface ConversationDeps {
@@ -72,7 +74,11 @@ export class Conversation {
     this.clearIdleTimer();
     this.deps.send({ type: "interrupt" });
     this.listening?.close();
-    this.listening = this.deps.stt?.open(this.deps.show.keyterms) ?? null;
+    const session: SttSession | null =
+      this.deps.stt?.open(this.deps.show.keyterms, (text) => {
+        if (this.listening === session) this.deps.send({ type: "caption_partial", role: "visitor", text });
+      }) ?? null;
+    this.listening = session;
     this.deps.send({ type: "state", state: "listening" });
   }
 

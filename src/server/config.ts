@@ -13,6 +13,28 @@ const CannedLines = z.object({
   goodbye: z.string(),
 });
 
+/** What the kiosk screen shows above the avatar. Text may use {{avatarName}}, {{company}} and {{eventName}}. */
+const KioskScreen = z.object({
+  /** Big line at the top, e.g. "Meet {{avatarName}}". */
+  headline: z.string().default("Meet {{avatarName}}"),
+  /** Words in the headline drawn in the accent color, e.g. "{{avatarName}}". "" colors nothing. */
+  accentText: z.string().default("{{avatarName}}"),
+  /** Accent color for the highlighted words, the listening light and buttons. */
+  accentColor: z.string().default("#ff4f1f"),
+  /** Color of the sound wave under the transcript. */
+  waveColor: z.string().default("#5468ff"),
+  /** Page background behind the header and avatar. */
+  backgroundColor: z.string().default("#0b1626"),
+  /** Logo above the headline: a file in shows/<show>/assets/ (e.g. "logo.svg") or an https URL. */
+  logo: z.string().default(""),
+  /** Text shown in place of the logo when there is no logo image. "" shows nothing. */
+  logoText: z.string().default(""),
+  /** How the avatar video fills its frame: "cover" crops the sides to fill it, "contain" shows the whole video. */
+  videoFit: z.enum(["cover", "contain"]).default("cover"),
+  /** Smaller line under the headline. "" hides it. */
+  subtitle: z.string().default(""),
+});
+
 const ShowFile = z.object({
   id: z.string(),
   eventName: z.string(),
@@ -69,6 +91,7 @@ const ShowFile = z.object({
   maxTurnsInMemory: z.number().int().positive().default(8),
   maxVisitorChars: z.number().int().positive().default(600),
   cannedLines: CannedLines,
+  screen: KioskScreen.default(KioskScreen.parse({})),
 });
 
 export type CannedLineKey = keyof z.infer<typeof CannedLines>;
@@ -99,8 +122,12 @@ export function loadShow(showsDir: string, name: string): ShowConfig {
       .replaceAll("{{eventName}}", show.eventName)
       .replaceAll("{{competitors}}", show.competitors.join(", ") || "none listed");
   const knowledgeFiles = readKnowledgeFiles(dir);
+  const screen = Object.fromEntries(
+    Object.entries(show.screen).map(([key, value]) => [key, typeof value === "string" ? fill(value) : value]),
+  ) as typeof show.screen;
   return {
     ...show,
+    screen,
     persona: fill(fs.readFileSync(path.join(dir, "persona.md"), "utf8")),
     knowledge: joinKnowledge(knowledgeFiles),
     knowledgeFiles,

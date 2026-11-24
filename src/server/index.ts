@@ -89,6 +89,8 @@ void warmLines(show, tts, lineAudio).then(async () => {
 const app = express();
 app.use(express.json());
 app.use(express.static(path.join(root, "public")));
+// Logos and other images for the kiosk header live in shows/<show>/assets/.
+app.use("/show-assets", express.static(path.join(root, "shows", env.showName, "assets")));
 
 app.get("/api/show", (_req, res) => {
   res.json({
@@ -96,6 +98,10 @@ app.get("/api/show", (_req, res) => {
     avatarName: show.avatarName,
     eventName: show.eventName,
     suggestedQuestions: show.suggestedQuestions,
+    screen: {
+      ...show.screen,
+      logo: show.screen.logo && !/^https?:\/\//.test(show.screen.logo) ? `/show-assets/${show.screen.logo}` : show.screen.logo,
+    },
     sandbox,
     prewarm,
     renderer,

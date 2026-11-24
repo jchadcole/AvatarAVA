@@ -54,5 +54,16 @@
     "safeFallback": "I'd better let one of my human teammates answer that one. They're right here at the booth.",
     "error": "Sorry, I lost my train of thought. Could you ask that again?",
     "goodbye": "Thanks for chatting. Enjoy the rest of the show!"
+  },
+  "screen": {
+    "headline": "Meet AVA",
+    "accentText": "AVA",
+    "accentColor": "#ff4f1f",
+    "waveColor": "#5468ff",
+    "backgroundColor": "#0b1626",
+    "logo": "",
+    "logoText": "GENESYS",
+    "subtitle": "",
+    "videoFit": "cover"
   }
 }

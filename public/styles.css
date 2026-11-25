@@ -168,6 +168,16 @@ button {
   cursor: pointer;
 }
 
+#attract #attract-status {
+  min-height: 1.3em;
+  font-size: 3.4cqw;
+  color: var(--muted);
+}
+
+#start:disabled {
+  opacity: 0.6;
+}
+
 #start {
   font-size: 5.5cqw;
   font-weight: 600;

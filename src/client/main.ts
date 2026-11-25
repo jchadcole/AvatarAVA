@@ -18,6 +18,7 @@ const captions = $("captions");
 const suggestions = $("suggestions");
 const sandboxBadge = $("sandbox");
 const wave = $<HTMLCanvasElement>("wave");
+const attractStatus = $("attract-status");
 
 interface ScreenConfig {
   headline: string;
@@ -294,7 +295,7 @@ function showHeader(screen: ScreenConfig): void {
 
 async function openSession(): Promise<Face> {
   const res = await fetch("/api/session", { method: "POST" });
-  if (!res.ok) throw new Error(await res.text());
+  if (!res.ok) throw new Error(`/api/session answered ${res.status}: ${await res.text()} (see the server's Terminal window)`);
   const { renderer, sessionToken } = (await res.json()) as { renderer: Renderer; sessionToken: string };
   const opened = createFace(renderer, sessionToken);
   opened.onDisconnected(() => {
@@ -327,19 +328,37 @@ function warmUp(): void {
     });
 }
 
+/** The longest a visitor waits after tapping Start before we say something went wrong. */
+const START_TIMEOUT_MS = 20000;
+
 async function startVisit(): Promise<void> {
   startButton.disabled = true;
-  statusLine.textContent = "Starting…";
-  try {
+  // The visit status line is hidden until the visit starts, so report on the start screen.
+  attractStatus.textContent = "Starting…";
+  const opening = (async () => {
     if (warming) await warming;
-    session = spare ?? (await openSession());
+    const ready = spare ?? (await openSession());
     spare = null;
+    return ready;
+  })();
+  let timedOut = false;
+  try {
+    const timeout = new Promise<never>((_, reject) =>
+      setTimeout(() => {
+        timedOut = true;
+        reject(new Error(`the avatar did not start within ${START_TIMEOUT_MS / 1000} seconds`));
+      }, START_TIMEOUT_MS),
+    );
+    session = await Promise.race([opening, timeout]);
+    attractStatus.textContent = "";
     document.body.classList.add("in-visit");
     send({ type: "start_visit" });
   } catch (err) {
-    console.error(err);
-    statusLine.textContent = "The avatar is taking a break. Please ask a booth teammate.";
+    console.error("[kiosk] Start failed:", err);
+    attractStatus.textContent = "The avatar is taking a break. Please ask a booth teammate.";
     session = null;
+    // A session that turns up after we gave up is closed, not left running (and billing).
+    if (timedOut) void opening.then((late) => late.stop()).catch(() => {});
   } finally {
     startButton.disabled = false;
   }

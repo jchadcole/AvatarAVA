@@ -78,8 +78,9 @@ A show can take its answers from a Genesys Cloud Agentic Virtual Agent (AVA) ins
 
 - The server opens a guest chat on a Genesys **Web Messaging** deployment for each visitor and sends the screened question. The deployment's inbound message flow hands it to a digital bot flow that calls the AVA, and the AVA's reply comes back on the same chat. When the visit ends, the chat is dropped and the next visitor gets a new one.
 - The visitor's chat opens when they tap Start, and each question goes to Genesys at once, while the safety classifier checks it. A flagged question is never answered aloud (Ava says her deflection line instead), but Genesys does see it. Set `"waitForScreening": true` to hold every question until the classifier passes it, so flagged questions never leave the booth; that adds 1-3 seconds per answer.
-- When the visitor taps Start, the app sends the bot a quiet "Hello" (`warmUpText`) and throws away its welcome line, so the visitor's first question gets a real answer and the bot is already running. A reply that is only a welcome line ("Hello, thanks for contacting... How can I help you today?") is never spoken as an answer. If the welcome asks the visitor something, such as "May I have your name, please?", Ava asks that question right after her own greeting, so the AVA gets the answer it expects (`speakOpeningQuestion`, default true).
-- If the AVA has not started answering within `replyTimeoutMs` (default 7 seconds), or Genesys errors, Claude answers that turn instead. The backstage screen shows which brain answered.
+- **The AVA does the talking.** When the visitor taps Start, the app sends the bot a quiet "Hello" (`warmUpText`) and Ava speaks the AVA's whole welcome, word for word, as her greeting. The show's `greeting` and `suggestedQuestions` are not used. The buttons under the transcript are the AVA's own quick replies (and card buttons), updated after every answer, and hidden when the AVA sends none. So the avatar's name, greeting, questions and answers are all set in the AVA; `show.json` only sets the text on the screen. If the AVA sends no welcome, Ava stays quiet until the visitor speaks, and Terminal says so.
+- Only safety lines are still the app's own: what Ava says when she didn't hear, when a question is deflected by the guardrails, or when an answer fails a check (`cannedLines`). They are kept neutral so they fit any AVA.
+- If the AVA has not started answering within `replyTimeoutMs` (default 10 seconds), or Genesys errors, Claude answers that turn instead, from the show's `persona.md` and knowledge. The backstage screen shows which brain answered.
 - The AVA's replies arrive as whole chat messages rather than word by word, so expect Ava to start talking later than with Claude.
 
 To turn it on, set this in `shows/<show>/show.json` (or `AVA_BRAIN`, `GENESYS_REGION`, `GENESYS_DEPLOYMENT_ID` and `GENESYS_ORIGIN` in `.env`):
@@ -90,10 +91,9 @@ To turn it on, set this in `shows/<show>/show.json` (or `AVA_BRAIN`, `GENESYS_RE
   "region": "mypurecloud.com",
   "deploymentId": "<Messenger deployment ID>",
   "origin": "",
-  "replyTimeoutMs": 7000,
+  "replyTimeoutMs": 10000,
   "waitForScreening": false,
-  "warmUpText": "Hello",
-  "speakOpeningQuestion": true
+  "warmUpText": "Hello"
 }
 ```
 

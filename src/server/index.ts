@@ -106,7 +106,8 @@ app.get("/api/show", (_req, res) => {
     company: show.company,
     avatarName: show.avatarName,
     eventName: show.eventName,
-    suggestedQuestions: show.suggestedQuestions,
+    // With the AVA, the buttons are its own quick replies, sent once it greets.
+    suggestedQuestions: genesys ? [] : show.suggestedQuestions,
     screen: {
       ...screen,
       logo: screen.logo && !/^https?:\/\//.test(screen.logo) ? `/show-assets/${screen.logo}` : screen.logo,

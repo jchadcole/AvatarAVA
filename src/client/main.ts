@@ -6,6 +6,7 @@ type ServerMessage =
   | { type: "state"; state: "idle" | "listening" | "thinking" | "speaking" }
   | { type: "caption"; role: "visitor" | "avatar"; text: string }
   | { type: "caption_partial"; role: "visitor"; text: string }
+  | { type: "suggestions"; items: string[] }
   | { type: "end_visit"; reason: string };
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -90,6 +91,9 @@ function handle(message: ServerMessage): void {
       break;
     case "caption_partial":
       transcript.visitor(message.text, false);
+      break;
+    case "suggestions":
+      setSuggestions(message.items);
       break;
     case "end_visit":
       // Let the goodbye line finish before the avatar leaves.
@@ -390,6 +394,7 @@ async function endVisit(): Promise<void> {
   document.body.classList.remove("in-visit");
   delete document.body.dataset.state;
   transcript.clear();
+  setSuggestions(startSuggestions);
   statusLine.textContent = "";
   await ending?.stop().catch(() => {});
   warmUp();
@@ -474,6 +479,21 @@ $("staff-corner").addEventListener("click", () => {
   }
 });
 
+/** The buttons a new visitor sees before Ava greets them. */
+let startSuggestions: string[] = [];
+
+/** Replaces the tap-to-ask buttons (the AVA's quick replies, or the show's questions). */
+function setSuggestions(items: string[]): void {
+  suggestions.replaceChildren(
+    ...items.map((question) => {
+      const button = document.createElement("button");
+      button.textContent = question;
+      button.addEventListener("click", () => send({ type: "ask", text: question }));
+      return button;
+    }),
+  );
+}
+
 async function init(): Promise<void> {
   const showInfo = await (await fetch("/api/show")).json();
   document.title = `${(showInfo.screen as ScreenConfig).avaName} · ${showInfo.company}`;
@@ -481,12 +501,8 @@ async function init(): Promise<void> {
   $("attract-sub").textContent = `${showInfo.company}'s digital host. Tap to start a conversation.`;
   sandboxBadge.hidden = !showInfo.sandbox;
   prewarm = Boolean(showInfo.prewarm);
-  for (const question of showInfo.suggestedQuestions as string[]) {
-    const button = document.createElement("button");
-    button.textContent = question;
-    button.addEventListener("click", () => send({ type: "ask", text: question }));
-    suggestions.append(button);
-  }
+  startSuggestions = showInfo.suggestedQuestions as string[];
+  setSuggestions(startSuggestions);
   attract.hidden = false;
   requestAnimationFrame(drawWave);
   connect();

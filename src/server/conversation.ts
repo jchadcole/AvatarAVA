@@ -4,6 +4,7 @@ import type { CannedLineKey, ShowConfig } from "./config.ts";
 import { precheck, quickScreen, screenOutput, type InputLabel } from "./guardrails.ts";
 import type { Insight } from "./insights.ts";
 import type { LogEntry } from "./transcriptLog.ts";
+import { SentenceChunker } from "./speech.ts";
 import type { Stt, SttSession, Tts } from "./voice.ts";
 
 /** Messages the server sends to the kiosk page. */
@@ -14,6 +15,8 @@ export type ServerMessage =
   | { type: "caption"; role: "visitor" | "avatar"; text: string }
   /** The visitor's words so far, while they are still talking; the final caption replaces it. */
   | { type: "caption_partial"; role: "visitor"; text: string }
+  /** The tap-to-ask buttons to show now; an empty list hides them. */
+  | { type: "suggestions"; items: string[] }
   | { type: "end_visit"; reason: "idle" | "strikes" | "staff" };
 
 export interface ConversationDeps {
@@ -64,15 +67,33 @@ export class Conversation {
   async greet(): Promise<void> {
     this.insight({ type: "visit", event: "start" });
     this.deps.brain.prepare?.();
-    const visit = this.visit;
-    await this.sayLine(this.deps.show.greeting);
-    // The brain may want to ask something first, such as the visitor's name.
-    const opening = await this.deps.brain.opening?.().catch(() => undefined);
-    // Only if the visitor hasn't started talking or left in the meantime.
-    if (opening && visit === this.visit && !this.turn && !this.listening) {
-      await this.sayLine(opening);
+    const { brain, show } = this.deps;
+    if (!brain.welcome) {
+      await this.sayLine(show.greeting);
+      this.showSuggestions();
+      this.armIdleTimer();
+      return;
     }
+    // The AVA greets the visitor itself: say exactly what it sent, nothing of our own.
+    const visit = this.visit;
+    this.deps.send({ type: "state", state: "thinking" });
+    const welcome = await brain.welcome().catch(() => undefined);
+    // Only if the visitor hasn't started talking or left in the meantime.
+    if (visit !== this.visit || this.turn || this.listening) return;
+    if (welcome) {
+      for (const sentence of splitSentences(welcome)) await this.sayLine(sentence);
+    } else {
+      console.warn("GREETING: the Genesys AVA sent no welcome, so Ava waits for the visitor to speak first.");
+      this.deps.send({ type: "state", state: "idle" });
+    }
+    this.showSuggestions();
     this.armIdleTimer();
+  }
+
+  /** The brain's own options when it sends them, else the show's suggested questions. */
+  private showSuggestions(): void {
+    const items = this.deps.brain.suggestions ?? this.deps.show.suggestedQuestions;
+    this.deps.send({ type: "suggestions", items });
   }
 
   /** Push-to-talk pressed. Also acts as barge-in if the avatar is talking. */
@@ -227,6 +248,7 @@ export class Conversation {
       this.remember(text, spoken.join(" "));
       this.answered(spoken.join(" "), canned, startedAt, firstSentenceMs);
     }
+    if (this.deps.brain.suggestions !== undefined && this.turn === ac) this.showSuggestions();
     this.finishTurn(ac);
   }
 
@@ -349,6 +371,12 @@ export async function warmLines(show: ShowConfig, tts: Tts, cache: Map<string, P
       console.warn(`Could not pre-synthesize "${text}":`, err);
     });
   }
+}
+
+/** Splits a chat message into sentences, so a long welcome starts speaking sooner. */
+function splitSentences(text: string): string[] {
+  const chunker = new SentenceChunker();
+  return [...chunker.push(`${text} `), ...chunker.flush()];
 }
 
 /** Waits for the promise, but never longer than `ms`. */

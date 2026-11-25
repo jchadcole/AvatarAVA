@@ -14,7 +14,7 @@
     "region": "mypurecloud.com",
     "deploymentId": "cc7224fb-c07c-4639-92e2-e95df6f3725b",
     "origin": "https://ava-kiosk.example.com",
-    "replyTimeoutMs": 7000,
+    "replyTimeoutMs": 10000,
     "waitForScreening": false,
     "warmUpText": "Hello"
   },
@@ -47,10 +47,10 @@
   "maxVisitorChars": 600,
   "cannedLines": {
     "didNotCatch": "Sorry, it's a bit loud in here. Could you say that again?",
-    "suggest": "No problem. You can also tap one of the questions on the screen.",
-    "deflectAbuse": "Let's keep it friendly. I'm happy to show you what Genesys is working on, though.",
-    "endSession": "I'll step back for now. Thanks for stopping by the Genesys booth!",
-    "deflectInjection": "Nice try! I only know booth things. Want to hear what Genesys Cloud can do?",
+    "suggest": "No problem. You can also tap one of the options on the screen.",
+    "deflectAbuse": "Let's keep it friendly. What else can I help you with?",
+    "endSession": "I'll step back for now. Thanks for stopping by!",
+    "deflectInjection": "I can't help with that one. What else can I help you with?",
     "safeFallback": "I'd better let one of my human teammates answer that one. They're right here at the booth.",
     "error": "Sorry, I lost my train of thought. Could you ask that again?",
     "goodbye": "Thanks for chatting. Enjoy the rest of the show!"

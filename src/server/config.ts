@@ -70,25 +70,22 @@ const ShowFile = z.object({
       /** Origin header to send when the deployment restricts domains, e.g. "https://booth.example.com". */
       origin: z.string().default(""),
       /** Claude answers the turn if the AVA has not started answering by then. */
-      replyTimeoutMs: z.number().int().positive().default(7000),
+      replyTimeoutMs: z.number().int().positive().default(10000),
       /** The AVA's reply counts as finished after this long with no new message. */
       quietMs: z.number().int().positive().default(800),
       /** true: hold each question until the safety classifier passes it (adds 1-3 s). */
       waitForScreening: z.boolean().default(false),
       /** Sent when a visitor taps Start so the bot's welcome message is out of the way; "" turns it off. */
       warmUpText: z.string().default("Hello"),
-      /** Ava asks the question in the bot's welcome (e.g. "May I have your name?") after her greeting. */
-      speakOpeningQuestion: z.boolean().default(true),
     })
     .default({
       region: "",
       deploymentId: "",
       origin: "",
-      replyTimeoutMs: 7000,
+      replyTimeoutMs: 10000,
       quietMs: 800,
       waitForScreening: false,
       warmUpText: "Hello",
-      speakOpeningQuestion: true,
     }),
   greeting: z.string(),
   suggestedQuestions: z.array(z.string()).default([]),

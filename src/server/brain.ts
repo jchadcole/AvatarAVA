@@ -24,10 +24,17 @@ export interface Brain {
   /** A visitor arrived; get ready for their first question. */
   prepare?(): void;
   /**
-   * Something to say right after the greeting, such as a bot asking the
-   * visitor's name. Resolves to undefined when there is nothing to add.
+   * For a brain that greets visitors itself (the Genesys AVA): its welcome,
+   * spoken instead of the show's greeting, one chat message at a time as they
+   * arrive. Ends without any when it sent none in time.
    */
-  opening?(): Promise<string | undefined>;
+  welcome?(): AsyncIterable<string>;
+  /**
+   * Tap-to-ask options the brain attached to its latest message (Genesys quick
+   * replies). Undefined for a brain that never sends any, so the show's own
+   * suggested questions are used.
+   */
+  readonly suggestions?: string[];
   /** The visitor left; forget anything kept for them. */
   endVisit?(): void;
 }

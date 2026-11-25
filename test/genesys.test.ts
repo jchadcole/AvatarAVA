@@ -5,7 +5,7 @@ import { WebSocketServer } from "ws";
 import type { Brain } from "../src/server/brain.ts";
 import { loadShow, pickGenesys, readEnv } from "../src/server/config.ts";
 import { Conversation, type ServerMessage } from "../src/server/conversation.ts";
-import { FallbackBrain, GenesysBrain, GenesysTimeoutError, looksLikeGreeting, openingQuestion, webMessagingUrl } from "../src/server/genesys.ts";
+import { FallbackBrain, GenesysBrain, GenesysTimeoutError, looksLikeGreeting, quickReplies, webMessagingUrl } from "../src/server/genesys.ts";
 import type { Insight } from "../src/server/insights.ts";
 
 /**
@@ -13,7 +13,7 @@ import type { Insight } from "../src/server/insights.ts";
  * guest's message back as Inbound (as Genesys does), shows typing, then sends
  * the AVA's reply as Outbound messages.
  */
-async function mockGenesys(opts: { replies?: string[]; delayMs?: number; sessionCode?: number; greeting?: string } = {}) {
+async function mockGenesys(opts: { replies?: string[]; delayMs?: number; sessionCode?: number; greeting?: string; content?: unknown[] } = {}) {
   const server = new WebSocketServer({ port: 0 });
   await new Promise((resolve) => server.once("listening", resolve));
   const received: { action: string; token: string; message?: { type: string; text?: string } }[] = [];
@@ -40,7 +40,8 @@ async function mockGenesys(opts: { replies?: string[]; delayMs?: number; session
           const first = opts.greeting && !greeted;
           greeted = true;
           for (const text of first ? [opts.greeting!] : (opts.replies ?? [])) {
-            send({ type: "message", class: "StructuredMessage", code: 200, body: { type: "Text", text, direction: "Outbound" } });
+            const content = opts.content ? { type: "Structured", content: opts.content } : { type: "Text" };
+            send({ type: "message", class: "StructuredMessage", code: 200, body: { ...content, text, direction: "Outbound" } });
           }
         }, opts.delayMs ?? 5);
       }
@@ -48,6 +49,12 @@ async function mockGenesys(opts: { replies?: string[]; delayMs?: number; session
   });
   const url = `ws://127.0.0.1:${(server.address() as AddressInfo).port}`;
   return { server, url, received, origins };
+}
+
+async function collectWelcome(brain: GenesysBrain): Promise<string[]> {
+  const out: string[] = [];
+  for await (const message of brain.welcome()) out.push(message);
+  return out;
 }
 
 const servers: WebSocketServer[] = [];
@@ -152,28 +159,44 @@ describe("GenesysBrain", () => {
     brain.endVisit();
   });
 
-  it("passes on the question in the bot's welcome and keeps personal replies", async () => {
-    const greeting = "Hello! I'm AVA, your Genesys Cloud virtual assistant. May I have your name, please?";
+  it("hands over the bot's whole welcome and keeps personal replies", async () => {
+    const greeting = "Hi, I am Iris, the IRS Virtual Assistant. Before we get started, may I ask who I'm speaking with today?";
     const { brain } = await brainFor({ greeting, replies: ["Hi Chad! How can I help you today?"] }, { warmUpText: "Hello" });
     brain.prepare();
-    expect(await brain.opening()).toBe("May I have your name, please?");
+    expect(await collectWelcome(brain)).toEqual([greeting]);
     // After the warm-up took the welcome, a greeting-shaped reply is a real answer.
     expect(await collect(brain, "My name is Chad")).toEqual(["Hi Chad! How can I help you today?"]);
     brain.endVisit();
   });
 
-  it("has nothing to add when the welcome only offers help", async () => {
-    const greeting = "Hello, thanks for contacting the booth line. How can I help you today?";
-    const { brain } = await brainFor({ greeting }, { warmUpText: "Hello" });
-    expect(await brain.opening()).toBeUndefined();
+  it("has no welcome when the warm-up is off", async () => {
+    const { brain } = await brainFor({ greeting: "Hello there. How can I help you today?" }, { warmUpText: "" });
+    expect(await collectWelcome(brain)).toEqual([]);
     brain.endVisit();
   });
 
-  it("finds the questions worth asking in a welcome", () => {
-    expect(openingQuestion("Hello! I'm AVA. May I have your name, please?")).toBe("May I have your name, please?");
-    expect(openingQuestion("Hi there. How can I help you today?")).toBeUndefined();
-    expect(openingQuestion("Welcome to the booth.")).toBeUndefined();
-    expect(openingQuestion(undefined)).toBeUndefined();
+  it("collects the AVA's quick replies", async () => {
+    const content = [
+      { contentType: "QuickReply", quickReply: { text: "Check my refund", payload: "refund", action: "Message" } },
+      { contentType: "QuickReply", quickReply: { text: "Payment plans", payload: "plans", action: "Message" } },
+    ];
+    const { brain } = await brainFor({ greeting: "Hi, I am Iris. What can I help with?", content, replies: ["Sure."] }, { warmUpText: "Hello" });
+    await collectWelcome(brain);
+    expect(brain.suggestions).toEqual(["Check my refund", "Payment plans"]);
+    brain.endVisit();
+    expect(brain.suggestions).toEqual([]);
+  });
+
+  it("reads buttons from cards and carousels, but not links", () => {
+    expect(
+      quickReplies({
+        content: [
+          { contentType: "Card", card: { actions: [{ type: "Postback", text: "Yes" }, { type: "Link", text: "irs.gov" }] } },
+          { contentType: "Carousel", carousel: { cards: [{ actions: [{ type: "Postback", text: "No" }] }] } },
+        ],
+      }),
+    ).toEqual(["Yes", "No"]);
+    expect(quickReplies({ text: "plain" })).toEqual([]);
   });
 
   it("says plainly when the bot only greets and never answers", async () => {
@@ -304,14 +327,8 @@ describe("Conversation with a brain that needs screened questions", () => {
 describe("Conversation start", () => {
   const show = loadShow(path.resolve("shows"), "demo");
 
-  it("asks the brain's opening question right after the greeting", async () => {
+  function start(brain: Brain) {
     const sent: ServerMessage[] = [];
-    const brain: Brain = {
-      async *reply() {
-        yield "unused";
-      },
-      opening: async () => "May I have your name, please?",
-    };
     const conversation = new Conversation({
       show,
       brain,
@@ -321,14 +338,111 @@ describe("Conversation start", () => {
       send: (m) => sent.push(m),
       kioskId: "test",
     });
+    const said = () => sent.flatMap((m) => (m.type === "say" ? [m.text] : []));
+    const chips = () => sent.flatMap((m) => (m.type === "suggestions" ? [m.items] : []));
+    return { conversation, said, chips };
+  }
+
+  it("says only the AVA's welcome, never the show's greeting, and shows its quick replies", async () => {
+    const { conversation, said, chips } = start({
+      async *reply() {
+        yield "unused";
+      },
+      async *welcome() {
+        yield "Hi, I am Iris, the IRS Virtual Assistant. May I ask who I'm speaking with today?";
+      },
+      suggestions: ["Check my refund"],
+    });
     await conversation.greet();
-    expect(sent.flatMap((m) => (m.type === "say" ? [m.text] : []))).toEqual([show.greeting, "May I have your name, please?"]);
+    expect(said().join(" ")).toBe("Hi, I am Iris, the IRS Virtual Assistant. May I ask who I'm speaking with today?");
+    expect(said()).not.toContain(show.greeting);
+    expect(chips()).toEqual([["Check my refund"]]);
+    conversation.endVisit("idle");
+  });
+
+  it("voices the AVA's welcome while the face is still loading", async () => {
+    const voiced: string[] = [];
+    const sent: ServerMessage[] = [];
+    const conversation = new Conversation({
+      show,
+      brain: {
+        async *reply() {
+          yield "unused";
+        },
+        async *welcome() {
+          yield "Hi, I am Iris.";
+        },
+        suggestions: [],
+      },
+      classifier: { classify: async () => "normal" },
+      tts: {
+        synthesize: async (text) => {
+          voiced.push(text);
+          return Buffer.from(text);
+        },
+      },
+      log: { write: () => {} },
+      send: (m) => sent.push(m),
+      kioskId: "test",
+    });
+    conversation.prepareVisit();
+    await new Promise((r) => setTimeout(r, 10));
+    expect(voiced).toEqual(["Hi, I am Iris."]);
+    expect(sent.some((m) => m.type === "say")).toBe(false); // nothing is said before the face is up
+    await conversation.greet();
+    expect(sent.flatMap((m) => (m.type === "say" ? [m.text] : []))).toEqual(["Hi, I am Iris."]);
+    conversation.endVisit("idle");
+  });
+
+  it("stays quiet and shows no Genesys questions when the AVA sends no welcome", async () => {
+    const { conversation, said, chips } = start({
+      async *reply() {
+        yield "unused";
+      },
+      async *welcome() {},
+      suggestions: [],
+    });
+    await conversation.greet();
+    expect(said()).toEqual([]);
+    expect(chips()).toEqual([[]]);
+    conversation.endVisit("idle");
+  });
+
+  it("updates the buttons after each AVA answer", async () => {
+    let options: string[] = [];
+    const { conversation, chips } = start({
+      async *reply() {
+        options = ["Yes", "No"];
+        yield "Did you already pay the notice?";
+      },
+      async *welcome() {
+        yield "Hello.";
+      },
+      get suggestions() {
+        return options;
+      },
+    });
+    await conversation.greet();
+    await conversation.handleVisitor("I got a notice");
+    expect(chips().at(-1)).toEqual(["Yes", "No"]);
+    conversation.endVisit("idle");
+  });
+
+  it("uses the show's greeting and questions with Claude", async () => {
+    const { conversation, said, chips } = start({
+      async *reply() {
+        yield "unused";
+      },
+    });
+    await conversation.greet();
+    expect(said()).toEqual([show.greeting]);
+    expect(chips()).toEqual([show.suggestedQuestions]);
     conversation.endVisit("idle");
   });
 });
 
 describe("pickGenesys", () => {
-  const base = { brain: "claude" as const, genesys: { region: "", deploymentId: "", origin: "", replyTimeoutMs: 7000, quietMs: 800, waitForScreening: false, warmUpText: "Hello", speakOpeningQuestion: true } };
+  const base = { brain: "claude" as const, genesys: { region: "", deploymentId: "", origin: "", replyTimeoutMs: 7000, quietMs: 800, waitForScreening: false, warmUpText: "Hello" } };
 
   it("is off unless the show or AVA_BRAIN turns it on", () => {
     expect(pickGenesys(readEnv({}), base)).toBeNull();

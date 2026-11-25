@@ -17,7 +17,8 @@ export interface SttSession {
 }
 
 export interface Stt {
-  open(keyterms: string[]): SttSession;
+  /** onPartial receives the transcript so far, while the visitor is still talking. */
+  open(keyterms: string[], onPartial?: (text: string) => void): SttSession;
 }
 
 export class DeepgramTts implements Tts {
@@ -132,7 +133,7 @@ export class DeepgramStt implements Stt {
     private readonly language: string,
   ) {}
 
-  open(keyterms: string[]): SttSession {
+  open(keyterms: string[], onPartial?: (text: string) => void): SttSession {
     const url = new URL("wss://api.deepgram.com/v1/listen");
     url.searchParams.set("model", this.model);
     url.searchParams.set("language", this.language);
@@ -140,7 +141,8 @@ export class DeepgramStt implements Stt {
     url.searchParams.set("sample_rate", "16000");
     url.searchParams.set("channels", "1");
     url.searchParams.set("smart_format", "true");
-    url.searchParams.set("interim_results", "false");
+    // Interim results let the kiosk show words as they are recognized.
+    url.searchParams.set("interim_results", onPartial ? "true" : "false");
     for (const term of keyterms) url.searchParams.append("keyterm", term);
 
     const socket = new WebSocket(url, { headers: { Authorization: `Token ${this.apiKey}` } });
@@ -157,6 +159,7 @@ export class DeepgramStt implements Stt {
       if (msg.type !== "Results") return;
       const text: string = msg.channel?.alternatives?.[0]?.transcript ?? "";
       if (msg.is_final && text) finals.push(text);
+      if (onPartial && text) onPartial([...finals, msg.is_final ? "" : text].join(" ").trim());
       if (msg.from_finalize) resolveDone?.();
     });
     socket.on("close", () => resolveDone?.());

@@ -4,6 +4,7 @@ import type { CannedLineKey, ShowConfig } from "./config.ts";
 import { precheck, quickScreen, screenOutput, type InputLabel } from "./guardrails.ts";
 import type { Insight } from "./insights.ts";
 import type { LogEntry } from "./transcriptLog.ts";
+import { SentenceChunker } from "./speech.ts";
 import type { Stt, SttSession, Tts } from "./voice.ts";
 
 /** Messages the server sends to the kiosk page. */
@@ -12,6 +13,10 @@ export type ServerMessage =
   | { type: "interrupt" }
   | { type: "state"; state: "idle" | "listening" | "thinking" | "speaking" }
   | { type: "caption"; role: "visitor" | "avatar"; text: string }
+  /** The visitor's words so far, while they are still talking; the final caption replaces it. */
+  | { type: "caption_partial"; role: "visitor"; text: string }
+  /** The tap-to-ask buttons to show now; an empty list hides them. */
+  | { type: "suggestions"; items: string[] }
   | { type: "end_visit"; reason: "idle" | "strikes" | "staff" };
 
 export interface ConversationDeps {
@@ -35,6 +40,16 @@ export interface ConversationDeps {
   sources?: { match(text: string): string[] };
 }
 
+type EarlyWelcome = {
+  lines: { text: string; audio: Promise<Buffer> }[];
+  done: boolean;
+  wake: () => void;
+  cancelled?: boolean;
+  tappedAt: number;
+  welcomeAt?: number;
+  voicedAt?: number;
+};
+
 /** Placeholder kept in history instead of text the guardrails deflected. */
 const DEFLECTED_TURN = "(The visitor said something the host politely deflected.)";
 
@@ -52,6 +67,8 @@ export class Conversation {
   private listening: SttSession | null = null;
   private idleTimer: NodeJS.Timeout | null = null;
   private readonly lineAudio: Map<string, Promise<Buffer>>;
+  /** The welcome being fetched and voiced while the avatar's face loads. */
+  private early: EarlyWelcome | null = null;
   /** Voices heard in the current turn, for the backstage screen. */
   private turnVoices = new Set<string>();
 
@@ -59,18 +76,106 @@ export class Conversation {
     this.lineAudio = deps.lineAudio ?? new Map();
   }
 
-  async greet(): Promise<void> {
-    this.insight({ type: "visit", event: "start" });
-    this.deps.brain.prepare?.();
-    const visit = this.visit;
-    await this.sayLine(this.deps.show.greeting);
-    // The brain may want to ask something first, such as the visitor's name.
-    const opening = await this.deps.brain.opening?.().catch(() => undefined);
-    // Only if the visitor hasn't started talking or left in the meantime.
-    if (opening && visit === this.visit && !this.turn && !this.listening) {
-      await this.sayLine(opening);
+  /**
+   * The visitor tapped Start and the avatar's face is still loading: open the
+   * brain's chat now and voice its welcome meanwhile, so Ava can speak the
+   * moment her face is ready.
+   */
+  prepareVisit(): void {
+    if (this.early) return;
+    const { brain, tts } = this.deps;
+    brain.prepare?.();
+    const early: EarlyWelcome = { lines: [], done: false, wake: () => {}, tappedAt: Date.now() };
+    this.early = early;
+    if (!brain.welcome) {
+      early.done = true;
+      return;
     }
+    void (async () => {
+      try {
+        for await (const message of brain.welcome!()) {
+          if (early.cancelled) return;
+          early.welcomeAt ??= Date.now();
+          for (const text of splitSentences(message)) {
+            const audio = tts.synthesize(text);
+            audio.then(() => (early.voicedAt ??= Date.now()), () => {});
+            early.lines.push({ text, audio });
+            early.wake();
+          }
+        }
+      } catch {
+        // no welcome: Ava waits for the visitor to speak
+      } finally {
+        early.done = true;
+        early.wake();
+      }
+    })();
+  }
+
+  /** The start screen gave up (the face never loaded): drop the chat opened for it. */
+  cancelVisit(): void {
+    if (!this.early) return;
+    this.early.cancelled = true;
+    this.early = null;
+    this.deps.brain.endVisit?.();
+  }
+
+  /** The avatar's face is ready: greet the visitor. */
+  async greet(faceMs?: number): Promise<void> {
+    this.insight({ type: "visit", event: "start" });
+    this.prepareVisit();
+    const early = this.early!;
+    this.early = null;
+    const { brain, show } = this.deps;
+    const faceAt = Date.now();
+    if (!brain.welcome) {
+      await this.sayLine(show.greeting);
+      this.showSuggestions();
+      this.armIdleTimer();
+      return;
+    }
+    // The AVA greets the visitor itself: say exactly what it sent, nothing of our own.
+    const visit = this.visit;
+    const stillWaiting = () => visit === this.visit && !this.turn && !this.listening;
+    let spokeAt: number | undefined;
+    let next = 0;
+    if (!early.lines.length) this.deps.send({ type: "state", state: "thinking" });
+    while (stillWaiting()) {
+      if (next < early.lines.length) {
+        const line = early.lines[next++];
+        let audio: Buffer;
+        try {
+          audio = await line.audio;
+        } catch (err) {
+          console.warn(`GREETING: could not voice "${line.text}":`, err);
+          continue;
+        }
+        if (!stillWaiting()) break;
+        spokeAt ??= Date.now();
+        this.speak(line.text, audio);
+        this.log({ role: "avatar", text: line.text, label: "welcome" });
+      } else if (early.done) break;
+      else await new Promise<void>((resolve) => (early.wake = resolve));
+    }
+    if (!stillWaiting()) return;
+    if (spokeAt === undefined) {
+      console.warn("GREETING: the Genesys AVA sent no welcome, so Ava waits for the visitor to speak first.");
+      this.deps.send({ type: "state", state: "idle" });
+    } else {
+      const s = (at?: number) => (at === undefined ? "?" : `${((at - early.tappedAt) / 1000).toFixed(1)} s`);
+      console.log(
+        `TIMING (Start): face ready ${faceMs !== undefined ? `${(faceMs / 1000).toFixed(1)} s` : s(faceAt)}, ` +
+          `AVA welcome ${s(early.welcomeAt)}, voice ${s(early.voicedAt)}, Ava started speaking ${s(spokeAt)} after Start was tapped.`,
+      );
+    }
+    this.showSuggestions();
     this.armIdleTimer();
+  }
+
+  /** The brain's own options when it sends them, else the show's suggested questions. */
+  private showSuggestions(): void {
+    const items = this.deps.brain.suggestions ?? this.deps.show.suggestedQuestions;
+    this.deps.send({ type: "suggestions", items });
   }
 
   /** Push-to-talk pressed. Also acts as barge-in if the avatar is talking. */
@@ -79,7 +184,11 @@ export class Conversation {
     this.clearIdleTimer();
     this.deps.send({ type: "interrupt" });
     this.listening?.close();
-    this.listening = this.deps.stt?.open(this.deps.show.keyterms) ?? null;
+    const session: SttSession | null =
+      this.deps.stt?.open(this.deps.show.keyterms, (text) => {
+        if (this.listening === session) this.deps.send({ type: "caption_partial", role: "visitor", text });
+      }) ?? null;
+    this.listening = session;
     this.deps.send({ type: "state", state: "listening" });
   }
 
@@ -218,9 +327,17 @@ export class Conversation {
       this.remember(DEFLECTED_TURN, said);
       this.answered(said, true, startedAt);
     } else if (spoken.length) {
+      if (firstSentenceMs !== undefined) {
+        const brainMs = this.deps.brain.lastReplyMs;
+        console.log(
+          `TIMING (question): ${this.deps.brain.lastAnsweredBy ?? "brain"} first words ${brainMs !== undefined ? `${(brainMs / 1000).toFixed(1)} s` : "?"}, ` +
+            `Ava started speaking ${(firstSentenceMs / 1000).toFixed(1)} s after the question.`,
+        );
+      }
       this.remember(text, spoken.join(" "));
       this.answered(spoken.join(" "), canned, startedAt, firstSentenceMs);
     }
+    if (this.deps.brain.suggestions !== undefined && this.turn === ac) this.showSuggestions();
     this.finishTurn(ac);
   }
 
@@ -230,6 +347,8 @@ export class Conversation {
     this.clearIdleTimer();
     this.listening?.close();
     this.listening = null;
+    if (this.early) this.early.cancelled = true;
+    this.early = null;
     this.log({ role: "system", text: "visit ended", label: reason });
     this.insight({ type: "visit", event: "end", reason });
     this.deps.brain.endVisit?.();
@@ -343,6 +462,12 @@ export async function warmLines(show: ShowConfig, tts: Tts, cache: Map<string, P
       console.warn(`Could not pre-synthesize "${text}":`, err);
     });
   }
+}
+
+/** Splits a chat message into sentences, so a long welcome starts speaking sooner. */
+function splitSentences(text: string): string[] {
+  const chunker = new SentenceChunker();
+  return [...chunker.push(`${text} `), ...chunker.flush()];
 }
 
 /** Waits for the promise, but never longer than `ms`. */

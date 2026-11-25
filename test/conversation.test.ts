@@ -48,6 +48,30 @@ function setup(
 afterEach(() => vi.useRealTimers());
 
 describe("Conversation", () => {
+  it("shows the visitor's words while they talk, then the final line", async () => {
+    const { conversation, sent } = setup();
+    let partial: ((text: string) => void) | undefined;
+    // Stand-in speech-to-text: reports words while listening, then the final text.
+    (conversation as unknown as { deps: { stt: unknown } }).deps.stt = {
+      open: (_terms: string[], onPartial?: (text: string) => void) => {
+        partial = onPartial;
+        return { write() {}, close() {}, finish: async () => "What is Genesys Cloud?" };
+      },
+    };
+    conversation.startListening();
+    partial?.("What is");
+    partial?.("What is Genesys");
+    await conversation.stopListening();
+    partial?.("late words are ignored");
+    const captions = sent.filter((m) => m.type === "caption_partial" || (m.type === "caption" && m.role === "visitor"));
+    expect(captions).toEqual([
+      { type: "caption_partial", role: "visitor", text: "What is" },
+      { type: "caption_partial", role: "visitor", text: "What is Genesys" },
+      { type: "caption", role: "visitor", text: "What is Genesys Cloud?" },
+    ]);
+    conversation.dispose();
+  });
+
   it("speaks each sentence of a normal reply and remembers the turn", async () => {
     const { conversation, said, histories } = setup();
     await conversation.handleVisitor("What does the Model X do?");

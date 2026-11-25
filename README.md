@@ -68,6 +68,7 @@ The source match is a word-overlap estimate of which file an answer drew on, not
 Copy `shows/demo` to `shows/<your-show>` and edit:
 
 - `show.json`: optionally `about`, one line on what the booth covers (the safety classifier uses it to tell on-topic from off-topic questions; default: the company, its products, demos and the event); the LiveAvatar `avatarId` (ignored in sandbox mode), the Deepgram `voice` (any [Aura-2 voice](https://developers.deepgram.com/docs/tts-models), default `aura-2-orpheus-en`), names, greeting, suggested questions, product keyterms for speech recognition, blocked terms, competitors, idle timeout, strike limit, and every canned line.
+- `show.json` `"screen"`: what the kiosk shows above the avatar. `headline` (e.g. `"Meet AVA"`), `accentText` (the words drawn in `accentColor`), `logo` (an image in `shows/<your-show>/assets/`, e.g. `"logo.svg"`, or an https URL), `logoText` (shown when there is no logo image), `subtitle` (optional smaller line), `backgroundColor`, `waveColor` (the sound wave under the transcript) `videoFit` (`"cover"` fills the frame, `"contain"` shows the whole video) and `avaName` and `visitorName` (the names on each transcript line; default the avatar's name and "You"), `avatarShare` (how much of the height under the header the avatar gets, 0.3 to 0.8, default 0.6; the transcript gets the rest). Text may use `{{avatarName}}`, `{{company}}` and `{{eventName}}`. The server re-reads the `"screen"` section each time the kiosk page loads, so edit it and reload the page; no restart needed (other show.json settings, including the spoken greeting and `avatarName`, still need a restart). The kiosk page is laid out for a portrait screen (e.g. 1080 x 1920, full screen); on a landscape screen it shows as a centered portrait column. The live transcript under the avatar shows the visitor's words as they are recognized and Ava's words as she says them.
 - `persona.md`: how the host speaks and stays in character. `{{avatarName}}`, `{{company}}`, `{{eventName}}` and `{{competitors}}` are filled in from `show.json`.
 - `knowledge.md` and the `knowledge/` folder: the only facts the avatar may answer from. Drop plain-text or Markdown files (`.md`, `.txt`) into `knowledge/`, one topic per file if you like; every file is loaded in name order when the server starts. Convert PDFs, slides and web pages to text first, and keep the total to what a booth host needs (the server warns above about 400,000 characters). If a visitor asks something the files don't cover, the avatar says it isn't sure and offers a booth teammate. The demo show uses a summary of the public genesys.com site (October 2026); each file names its source page.
 
@@ -77,8 +78,9 @@ A show can take its answers from a Genesys Cloud Agentic Virtual Agent (AVA) ins
 
 - The server opens a guest chat on a Genesys **Web Messaging** deployment for each visitor and sends the screened question. The deployment's inbound message flow hands it to a digital bot flow that calls the AVA, and the AVA's reply comes back on the same chat. When the visit ends, the chat is dropped and the next visitor gets a new one.
 - The visitor's chat opens when they tap Start, and each question goes to Genesys at once, while the safety classifier checks it. A flagged question is never answered aloud (Ava says her deflection line instead), but Genesys does see it. Set `"waitForScreening": true` to hold every question until the classifier passes it, so flagged questions never leave the booth; that adds 1-3 seconds per answer.
-- When the visitor taps Start, the app sends the bot a quiet "Hello" (`warmUpText`) and throws away its welcome line, so the visitor's first question gets a real answer and the bot is already running. A reply that is only a welcome line ("Hello, thanks for contacting... How can I help you today?") is never spoken as an answer. If the welcome asks the visitor something, such as "May I have your name, please?", Ava asks that question right after her own greeting, so the AVA gets the answer it expects (`speakOpeningQuestion`, default true).
-- If the AVA has not started answering within `replyTimeoutMs` (default 7 seconds), or Genesys errors, Claude answers that turn instead. The backstage screen shows which brain answered.
+- **The AVA does the talking.** When the visitor taps Start, the app sends the bot a quiet "Hello" (`warmUpText`) and Ava speaks the AVA's whole welcome, word for word, as her greeting. The show's `greeting` and `suggestedQuestions` are not used. The buttons under the transcript are the AVA's own quick replies (and card buttons), updated after every answer, and hidden when the AVA sends none. So the avatar's name, greeting, questions and answers are all set in the AVA; `show.json` only sets the text on the screen. If the AVA sends no welcome, Ava stays quiet until the visitor speaks, and Terminal says so.
+- Only safety lines are still the app's own: what Ava says when she didn't hear, when a question is deflected by the guardrails, or when an answer fails a check (`cannedLines`). They are kept neutral so they fit any AVA.
+- If the AVA has not started answering within `replyTimeoutMs` (default 10 seconds), or Genesys errors, Claude answers that turn instead, from the show's `persona.md` and knowledge. The backstage screen shows which brain answered.
 - The AVA's replies arrive as whole chat messages rather than word by word, so expect Ava to start talking later than with Claude.
 
 To turn it on, set this in `shows/<show>/show.json` (or `AVA_BRAIN`, `GENESYS_REGION`, `GENESYS_DEPLOYMENT_ID` and `GENESYS_ORIGIN` in `.env`):
@@ -89,10 +91,9 @@ To turn it on, set this in `shows/<show>/show.json` (or `AVA_BRAIN`, `GENESYS_RE
   "region": "mypurecloud.com",
   "deploymentId": "<Messenger deployment ID>",
   "origin": "",
-  "replyTimeoutMs": 7000,
+  "replyTimeoutMs": 10000,
   "waitForScreening": false,
-  "warmUpText": "Hello",
-  "speakOpeningQuestion": true
+  "warmUpText": "Hello"
 }
 ```
 

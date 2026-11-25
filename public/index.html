@@ -10,24 +10,42 @@
     <div id="staff-corner" aria-hidden="true"></div>
     <span id="sandbox" hidden>Sandbox: sessions end after about a minute</span>
 
-    <main id="stage">
-      <video id="avatar" autoplay playsinline></video>
+    <!-- Portrait kiosk: configurable header, the avatar, and the live transcript over its lower part. -->
+    <main id="kiosk">
+      <header id="masthead">
+        <div id="logo">
+          <img id="logo-image" alt="" hidden />
+          <span id="logo-text" hidden></span>
+        </div>
+        <h1 id="headline"></h1>
+        <p id="subtitle" hidden></p>
+      </header>
 
-      <aside id="panel">
-        <section id="attract" hidden>
-          <h1 id="attract-title">Meet our host</h1>
-          <p id="attract-sub"></p>
-          <button id="start">Start</button>
-        </section>
+      <section id="stage">
+        <div id="avatar-frame">
+          <video id="avatar" autoplay playsinline></video>
+        </div>
 
-        <section id="visit">
-          <h2>Conversation</h2>
-          <div id="captions" aria-live="polite"></div>
-          <p id="status"></p>
-          <button id="talk">Hold to talk</button>
-          <div id="suggestions"></div>
-        </section>
-      </aside>
+        <aside id="panel">
+          <section id="attract" hidden>
+            <p id="attract-sub"></p>
+            <button id="start">Start</button>
+            <p id="attract-status" role="status"></p>
+          </section>
+
+          <section id="visit">
+            <div id="captions" aria-live="polite"></div>
+            <div id="controls">
+              <button id="talk" aria-label="Hold to talk">
+                <span class="dot"></span>
+              </button>
+              <p id="status"></p>
+              <canvas id="wave" aria-hidden="true"></canvas>
+            </div>
+            <div id="suggestions"></div>
+          </section>
+        </aside>
+      </section>
     </main>
 
     <script type="module" src="app.js"></script>

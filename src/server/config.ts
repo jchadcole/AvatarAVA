@@ -13,6 +13,34 @@ const CannedLines = z.object({
   goodbye: z.string(),
 });
 
+/** What the kiosk screen shows above the avatar. Text may use {{avatarName}}, {{company}} and {{eventName}}. */
+const KioskScreen = z.object({
+  /** Big line at the top, e.g. "Meet {{avatarName}}". */
+  headline: z.string().default("Meet {{avatarName}}"),
+  /** Words in the headline drawn in the accent color, e.g. "{{avatarName}}". "" colors nothing. */
+  accentText: z.string().default("{{avatarName}}"),
+  /** Accent color for the highlighted words, the listening light and buttons. */
+  accentColor: z.string().default("#ff4f1f"),
+  /** Color of the sound wave under the transcript. */
+  waveColor: z.string().default("#5468ff"),
+  /** Page background behind the header and avatar. */
+  backgroundColor: z.string().default("#0b1626"),
+  /** Logo above the headline: a file in shows/<show>/assets/ (e.g. "logo.svg") or an https URL. */
+  logo: z.string().default(""),
+  /** Text shown in place of the logo when there is no logo image. "" shows nothing. */
+  logoText: z.string().default(""),
+  /** How the avatar video fills its frame: "cover" crops the sides to fill it, "contain" shows the whole video. */
+  videoFit: z.enum(["cover", "contain"]).default("cover"),
+  /** Share of the height under the header given to the avatar (0.3 to 0.8); the transcript gets the rest. */
+  avatarShare: z.number().min(0.3).max(0.8).default(0.6),
+  /** Name shown on the avatar's lines in the transcript. */
+  avaName: z.string().default("{{avatarName}}"),
+  /** Name shown on the visitor's lines in the transcript. */
+  visitorName: z.string().default("You"),
+  /** Smaller line under the headline. "" hides it. */
+  subtitle: z.string().default(""),
+});
+
 const ShowFile = z.object({
   id: z.string(),
   eventName: z.string(),
@@ -42,25 +70,22 @@ const ShowFile = z.object({
       /** Origin header to send when the deployment restricts domains, e.g. "https://booth.example.com". */
       origin: z.string().default(""),
       /** Claude answers the turn if the AVA has not started answering by then. */
-      replyTimeoutMs: z.number().int().positive().default(7000),
+      replyTimeoutMs: z.number().int().positive().default(10000),
       /** The AVA's reply counts as finished after this long with no new message. */
       quietMs: z.number().int().positive().default(800),
       /** true: hold each question until the safety classifier passes it (adds 1-3 s). */
       waitForScreening: z.boolean().default(false),
       /** Sent when a visitor taps Start so the bot's welcome message is out of the way; "" turns it off. */
       warmUpText: z.string().default("Hello"),
-      /** Ava asks the question in the bot's welcome (e.g. "May I have your name?") after her greeting. */
-      speakOpeningQuestion: z.boolean().default(true),
     })
     .default({
       region: "",
       deploymentId: "",
       origin: "",
-      replyTimeoutMs: 7000,
+      replyTimeoutMs: 10000,
       quietMs: 800,
       waitForScreening: false,
       warmUpText: "Hello",
-      speakOpeningQuestion: true,
     }),
   greeting: z.string(),
   suggestedQuestions: z.array(z.string()).default([]),
@@ -72,6 +97,7 @@ const ShowFile = z.object({
   maxTurnsInMemory: z.number().int().positive().default(8),
   maxVisitorChars: z.number().int().positive().default(600),
   cannedLines: CannedLines,
+  screen: KioskScreen.default(KioskScreen.parse({})),
 });
 
 export type CannedLineKey = keyof z.infer<typeof CannedLines>;
@@ -102,12 +128,35 @@ export function loadShow(showsDir: string, name: string): ShowConfig {
       .replaceAll("{{eventName}}", show.eventName)
       .replaceAll("{{competitors}}", show.competitors.join(", ") || "none listed");
   const knowledgeFiles = readKnowledgeFiles(dir);
+  const screen = Object.fromEntries(
+    Object.entries(show.screen).map(([key, value]) => [key, typeof value === "string" ? fill(value) : value]),
+  ) as typeof show.screen;
   return {
     ...show,
+    screen,
     persona: fill(fs.readFileSync(path.join(dir, "persona.md"), "utf8")),
     knowledge: joinKnowledge(knowledgeFiles),
     knowledgeFiles,
   };
+}
+
+export type KioskScreenConfig = z.infer<typeof KioskScreen>;
+
+/**
+ * Reads just the kiosk screen settings from shows/<name>/show.json, so edits to
+ * the header and transcript names show up on the next page load without a restart.
+ */
+export function loadScreen(showsDir: string, name: string): KioskScreenConfig {
+  const raw = JSON.parse(fs.readFileSync(path.join(showsDir, name, "show.json"), "utf8"));
+  const show = ShowFile.pick({ avatarName: true, company: true, eventName: true, screen: true }).parse(raw);
+  const fill = (text: string) =>
+    text
+      .replaceAll("{{avatarName}}", show.avatarName)
+      .replaceAll("{{company}}", show.company)
+      .replaceAll("{{eventName}}", show.eventName);
+  return Object.fromEntries(
+    Object.entries(show.screen).map(([key, value]) => [key, typeof value === "string" ? fill(value) : value]),
+  ) as KioskScreenConfig;
 }
 
 /** Roughly 100k tokens; beyond this replies slow down and cost more. */

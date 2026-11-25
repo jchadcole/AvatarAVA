@@ -6,7 +6,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import express from "express";
 import { WebSocketServer } from "ws";
 import { ClaudeBrain, type Brain } from "./brain.ts";
-import { loadShow, pickGenesys, pickRenderer, readEnv } from "./config.ts";
+import { loadScreen, loadShow, pickGenesys, pickRenderer, readEnv } from "./config.ts";
 import { Conversation, warmLines, type ServerMessage } from "./conversation.ts";
 import { FallbackBrain, GenesysBrain, webMessagingUrl } from "./genesys.ts";
 import { InputClassifier } from "./guardrails.ts";
@@ -89,18 +89,41 @@ void warmLines(show, tts, lineAudio).then(async () => {
 const app = express();
 app.use(express.json());
 app.use(express.static(path.join(root, "public")));
+// Logos and other images for the kiosk header live in shows/<show>/assets/.
+app.use("/show-assets", express.static(path.join(root, "shows", env.showName, "assets")));
+
+/** Last screen settings that loaded cleanly; a typo in show.json keeps these. */
+let screen = show.screen;
 
 app.get("/api/show", (_req, res) => {
+  // Re-read the screen settings on every page load, so header and name edits need no restart.
+  try {
+    screen = loadScreen(path.join(root, "shows"), env.showName);
+  } catch (err) {
+    console.warn(`SCREEN: could not read the "screen" settings in shows/${env.showName}/show.json, keeping the last good ones. ${(err as Error).message}`);
+  }
   res.json({
     company: show.company,
     avatarName: show.avatarName,
     eventName: show.eventName,
-    suggestedQuestions: show.suggestedQuestions,
+    // With the AVA, the buttons are its own quick replies, sent once it greets.
+    suggestedQuestions: genesys ? [] : show.suggestedQuestions,
+    screen: {
+      ...screen,
+      logo: screen.logo && !/^https?:\/\//.test(screen.logo) ? `/show-assets/${screen.logo}` : screen.logo,
+    },
     sandbox,
     prewarm,
     renderer,
     voice: voiceName,
   });
+});
+
+// The kiosk page reports its own errors here so they show up in this Terminal window.
+app.post("/api/kiosk-error", (req, res) => {
+  const message = typeof req.body?.message === "string" ? req.body.message.slice(0, 2000) : "(no message)";
+  console.error(`KIOSK ERROR (from the browser): ${message}`);
+  res.status(204).end();
 });
 
 app.post("/api/session", async (_req, res) => {
@@ -116,8 +139,8 @@ app.post("/api/session", async (_req, res) => {
           });
     res.json({ renderer, sessionToken });
   } catch (err) {
-    console.error(err);
-    res.status(502).json({ error: "Could not start the avatar session." });
+    console.error(`FACE ERROR: could not get a ${renderer} session. ${(err as Error).message}`);
+    res.status(502).json({ error: "Could not start the avatar session.", detail: (err as Error).message });
   }
 });
 
@@ -144,7 +167,9 @@ backstage.on("connection", (socket) => {
 
 /** Messages the kiosk page sends. Binary frames are PCM16 16 kHz mic audio. */
 type ClientMessage =
-  | { type: "start_visit" }
+  | { type: "visit_starting" }
+  | { type: "visit_cancelled" }
+  | { type: "start_visit"; faceMs?: number }
   | { type: "ptt_start" }
   | { type: "ptt_end" }
   | { type: "ask"; text: string }
@@ -180,8 +205,14 @@ wss.on("connection", (socket) => {
       return;
     }
     switch (message.type) {
+      case "visit_starting":
+        conversation.prepareVisit();
+        break;
+      case "visit_cancelled":
+        conversation.cancelVisit();
+        break;
       case "start_visit":
-        void conversation.greet();
+        void conversation.greet(typeof message.faceMs === "number" ? message.faceMs : undefined);
         break;
       case "ptt_start":
         conversation.startListening();

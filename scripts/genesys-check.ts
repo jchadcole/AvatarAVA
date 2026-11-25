@@ -61,10 +61,11 @@ try {
     answer.push(sentence);
   }
   if (brain.lastWarmUpReply) {
-    console.log(`\nBot's welcome line (sent at Start and skipped, so Ava never says it as an answer): ${brain.lastWarmUpReply}`);
-    const opening = await brain.opening();
-    if (opening) console.log(`Ava asks this right after her greeting: ${opening}`);
+    console.log(`\nAVA WELCOME (Ava says this when a visitor taps Start): ${brain.lastWarmUpReply}`);
+  } else if (settings.warmUpText) {
+    console.log("\nNote: the AVA sent no welcome, so Ava would say nothing until the visitor speaks.");
   }
+  if (brain.suggestions.length) console.log(`AVA QUICK REPLIES (shown as buttons): ${brain.suggestions.join(" | ")}`);
   if (!answer.length) {
     console.log("\nGENESYS CHECK FAILED: the AVA sent no words. Check the bot flow and that the AVA is published.");
     process.exitCode = 1;

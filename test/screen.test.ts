@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { loadShow } from "../src/server/config.ts";
+import { loadScreen, loadShow } from "../src/server/config.ts";
 
 const showsDir = path.join(import.meta.dirname, "..", "shows");
 
@@ -31,6 +31,15 @@ describe("kiosk screen settings", () => {
     expect(show.screen.headline).toBe("Talk to Ava at Demo Show");
     expect(show.screen.subtitle).toBe("Genesys booth");
     expect(show.screen.accentColor).toBe("#ff4f1f");
+  });
+
+  it("re-reads just the screen settings after an edit", () => {
+    const dir = tempShow({ headline: "Meet AVA", accentText: "AVA", avaName: "AVA" });
+    const file = path.join(dir, "t", "show.json");
+    const raw = JSON.parse(fs.readFileSync(file, "utf8"));
+    raw.screen = { headline: "Meet Nova", accentText: "Nova", avaName: "Nova" };
+    fs.writeFileSync(file, JSON.stringify(raw));
+    expect(loadScreen(dir, "t")).toMatchObject({ headline: "Meet Nova", accentText: "Nova", avaName: "Nova", visitorName: "You" });
   });
 
   it("reads the demo show's header", () => {

@@ -6,7 +6,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import express from "express";
 import { WebSocketServer } from "ws";
 import { ClaudeBrain, type Brain } from "./brain.ts";
-import { loadShow, pickGenesys, pickRenderer, readEnv } from "./config.ts";
+import { loadScreen, loadShow, pickGenesys, pickRenderer, readEnv } from "./config.ts";
 import { Conversation, warmLines, type ServerMessage } from "./conversation.ts";
 import { FallbackBrain, GenesysBrain, webMessagingUrl } from "./genesys.ts";
 import { InputClassifier } from "./guardrails.ts";
@@ -92,15 +92,24 @@ app.use(express.static(path.join(root, "public")));
 // Logos and other images for the kiosk header live in shows/<show>/assets/.
 app.use("/show-assets", express.static(path.join(root, "shows", env.showName, "assets")));
 
+/** Last screen settings that loaded cleanly; a typo in show.json keeps these. */
+let screen = show.screen;
+
 app.get("/api/show", (_req, res) => {
+  // Re-read the screen settings on every page load, so header and name edits need no restart.
+  try {
+    screen = loadScreen(path.join(root, "shows"), env.showName);
+  } catch (err) {
+    console.warn(`SCREEN: could not read the "screen" settings in shows/${env.showName}/show.json, keeping the last good ones. ${(err as Error).message}`);
+  }
   res.json({
     company: show.company,
     avatarName: show.avatarName,
     eventName: show.eventName,
     suggestedQuestions: show.suggestedQuestions,
     screen: {
-      ...show.screen,
-      logo: show.screen.logo && !/^https?:\/\//.test(show.screen.logo) ? `/show-assets/${show.screen.logo}` : show.screen.logo,
+      ...screen,
+      logo: screen.logo && !/^https?:\/\//.test(screen.logo) ? `/show-assets/${screen.logo}` : screen.logo,
     },
     sandbox,
     prewarm,

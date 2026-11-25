@@ -437,7 +437,7 @@ $("staff-corner").addEventListener("click", () => {
 
 async function init(): Promise<void> {
   const showInfo = await (await fetch("/api/show")).json();
-  document.title = `${showInfo.avatarName} · ${showInfo.company}`;
+  document.title = `${(showInfo.screen as ScreenConfig).avaName} · ${showInfo.company}`;
   showHeader(showInfo.screen as ScreenConfig);
   $("attract-sub").textContent = `${showInfo.company}'s digital host. Tap to start a conversation.`;
   sandboxBadge.hidden = !showInfo.sandbox;

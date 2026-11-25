@@ -143,6 +143,25 @@ export function loadShow(showsDir: string, name: string): ShowConfig {
   };
 }
 
+export type KioskScreenConfig = z.infer<typeof KioskScreen>;
+
+/**
+ * Reads just the kiosk screen settings from shows/<name>/show.json, so edits to
+ * the header and transcript names show up on the next page load without a restart.
+ */
+export function loadScreen(showsDir: string, name: string): KioskScreenConfig {
+  const raw = JSON.parse(fs.readFileSync(path.join(showsDir, name, "show.json"), "utf8"));
+  const show = ShowFile.pick({ avatarName: true, company: true, eventName: true, screen: true }).parse(raw);
+  const fill = (text: string) =>
+    text
+      .replaceAll("{{avatarName}}", show.avatarName)
+      .replaceAll("{{company}}", show.company)
+      .replaceAll("{{eventName}}", show.eventName);
+  return Object.fromEntries(
+    Object.entries(show.screen).map(([key, value]) => [key, typeof value === "string" ? fill(value) : value]),
+  ) as KioskScreenConfig;
+}
+
 /** Roughly 100k tokens; beyond this replies slow down and cost more. */
 const KNOWLEDGE_WARN_CHARS = 400_000;
 

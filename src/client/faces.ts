@@ -1,7 +1,7 @@
 import { AnamEvent, createClient, type AgentAudioInputStream } from "@anam-ai/js-sdk";
 import { AgentEventsEnum, LiveAvatarSession, SessionEvent } from "@heygen/liveavatar-web-sdk";
 
-export type Renderer = "liveavatar" | "anam";
+export type Renderer = "liveavatar" | "anam" | "image";
 
 /**
  * A hosted face that lip-syncs to audio we send. The kiosk never lets the
@@ -22,7 +22,77 @@ export interface Face {
 }
 
 export function createFace(renderer: Renderer, sessionToken: string): Face {
+  if (renderer === "image") return new VoiceOnlyFace();
   return renderer === "anam" ? new AnamFace(sessionToken) : new LiveAvatarFace(sessionToken);
+}
+
+/** One audio output for the voice-only face, made on the visitor's tap so the browser lets it play. */
+let speaker: AudioContext | null = null;
+
+/** Call from a tap or click: browsers only start audio after the visitor touches the page. */
+export function unlockAudio(): void {
+  speaker ??= new AudioContext({ sampleRate: 24000 });
+  void speaker.resume();
+}
+
+/**
+ * No face at all (the "image" scene): the kiosk plays the host's voice itself,
+ * line after line, and the words type into the scene's speech bubble instead.
+ */
+class VoiceOnlyFace implements Face {
+  private playing = new Set<AudioBufferSourceNode>();
+  /** When the audio queued so far finishes, on the AudioContext clock. */
+  private playsUntil = 0;
+  private speakEnded: (() => void) | null = null;
+
+  async start(): Promise<void> {
+    unlockAudio();
+  }
+
+  say(audio: string): void {
+    unlockAudio();
+    const context = speaker!;
+    const bytes = Uint8Array.from(atob(audio), (c) => c.charCodeAt(0));
+    const pcm = new Int16Array(bytes.buffer, 0, bytes.length >> 1);
+    if (!pcm.length) return;
+    const buffer = context.createBuffer(1, pcm.length, 24000);
+    const samples = buffer.getChannelData(0);
+    for (let i = 0; i < pcm.length; i++) samples[i] = pcm[i] / 0x8000;
+    const source = context.createBufferSource();
+    source.buffer = buffer;
+    source.connect(context.destination);
+    // Lines play back to back, with no gap or overlap.
+    const at = Math.max(context.currentTime + 0.02, this.playsUntil);
+    source.start(at);
+    this.playsUntil = at + buffer.duration;
+    this.playing.add(source);
+    source.onended = () => {
+      this.playing.delete(source);
+      if (!this.playing.size) this.speakEnded?.();
+    };
+  }
+
+  endTurn(): void {}
+
+  interrupt(): void {
+    for (const source of this.playing) {
+      source.onended = null;
+      source.stop();
+    }
+    this.playing.clear();
+    this.playsUntil = 0;
+    this.speakEnded?.();
+  }
+
+  async stop(): Promise<void> {
+    this.interrupt();
+  }
+
+  onDisconnected(): void {}
+
+  onSpeakEnded(handler: () => void): void {
+    this.speakEnded = handler;
+  }
 }
 
 class LiveAvatarFace implements Face {

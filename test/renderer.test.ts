@@ -20,13 +20,18 @@ describe("pickRenderer", () => {
     expect(pickRenderer(env, show)).toEqual({ renderer: "anam", avatarId: "other" });
   });
 
+  it("needs no avatar service or key for the image scene", () => {
+    expect(pickRenderer(readEnv({ AVA_RENDERER: "image" }), show)).toEqual({ renderer: "image", avatarId: "" });
+    expect(pickRenderer(readEnv({}), { ...show, renderer: "image" })).toEqual({ renderer: "image", avatarId: "" });
+  });
+
   it("explains what is missing", () => {
     expect(() => pickRenderer(readEnv({ AVA_RENDERER: "anam" }), show)).toThrow(/ANAM_API_KEY/);
     expect(() => pickRenderer(readEnv({ ANAM_API_KEY: "k" }), { ...show, renderer: "anam", anamAvatarId: undefined })).toThrow(
       /anamAvatarId/,
     );
     expect(() => pickRenderer(readEnv({}), show)).toThrow(/LIVEAVATAR_API_KEY/);
-    expect(() => readEnv({ AVA_RENDERER: "tavus" })).toThrow(/liveavatar or anam/);
+    expect(() => readEnv({ AVA_RENDERER: "tavus" })).toThrow(/liveavatar, anam or image/);
   });
 });
 

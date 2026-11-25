@@ -412,3 +412,184 @@ body[data-state="speaking"] #suggestions {
   font-size: 14px;
   z-index: 5;
 }
+
+/* ---- Image scene (renderer "image") --------------------------------------
+ * One landscape picture fills the screen (letterboxed to keep its shape). The
+ * AVA's and the visitor's words type into the picture's two speech bubbles,
+ * placed from show.json "screen.scene". The controls sit in a bar at the bottom.
+ */
+
+body.scene-mode #kiosk {
+  display: none;
+}
+
+#scene {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #000;
+}
+
+#scene[hidden] {
+  display: none;
+}
+
+#scene-frame {
+  --scene-ar: 1.774;
+  container-type: size;
+  position: relative;
+  width: min(100vw, calc(100vh * var(--scene-ar)));
+  aspect-ratio: var(--scene-ar);
+  overflow: hidden;
+}
+
+#scene-image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+}
+
+/* The blank part of a speech bubble. The text shrinks (--fit) to stay inside it. */
+.bubble {
+  --fit: 1;
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  overflow: hidden;
+  font-size: calc(var(--fit) * var(--bubble-font, 1.75) * 1cqw);
+  line-height: 1.32;
+  font-weight: 500;
+}
+
+/* Very long lines: keep the newest words in view and fade the oldest. */
+.bubble.overflow {
+  justify-content: flex-end;
+  mask-image: linear-gradient(to bottom, transparent 0, #000 25%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 25%);
+}
+
+.bubble p {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+#ava-bubble {
+  color: var(--ava-ink, #14213d);
+}
+
+#caller-bubble {
+  color: var(--caller-ink, #14213d);
+}
+
+/* A blinking caret while words are still typing. */
+.bubble.typing p::after {
+  content: "";
+  display: inline-block;
+  width: 0.08em;
+  height: 1em;
+  margin-left: 0.08em;
+  vertical-align: -0.12em;
+  background: currentColor;
+  animation: caret 0.8s steps(1) infinite;
+}
+
+/* The visitor's words before speech-to-text is sure of them. */
+#caller-bubble.partial p {
+  opacity: 0.75;
+}
+
+@keyframes caret {
+  50% {
+    opacity: 0;
+  }
+}
+
+/* The portrait panel, moved into the scene as a bar along the bottom. */
+body.scene-mode #panel {
+  position: absolute;
+  left: 50%;
+  bottom: 2.5cqh;
+  transform: translateX(-50%);
+  width: 46cqw;
+  max-height: 40cqh;
+  flex: none;
+  border-radius: 1.6cqw;
+  background: rgba(8, 14, 24, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  z-index: 2;
+}
+
+body.scene-mode #attract {
+  flex-direction: row;
+  gap: 1.5cqw;
+  padding: 1.2cqw 1.6cqw;
+}
+
+body.scene-mode #attract-sub {
+  display: none;
+}
+
+body.scene-mode #start {
+  font-size: 1.9cqw;
+  padding: 0.9cqw 4.5cqw;
+}
+
+body.scene-mode #attract #attract-status {
+  min-height: 0;
+  font-size: 1.2cqw;
+}
+
+body.scene-mode #attract #attract-status:empty {
+  display: none;
+}
+
+body.scene-mode #visit {
+  padding: 1cqw 1.4cqw;
+  gap: 0.8cqw;
+}
+
+body.scene-mode #captions {
+  display: none;
+}
+
+body.scene-mode #controls {
+  gap: 1.2cqw;
+  padding-top: 0;
+  border-top: 0;
+}
+
+body.scene-mode #talk {
+  width: 4cqw;
+  height: 4cqw;
+  border-width: 0.22cqw;
+}
+
+body.scene-mode #talk .dot {
+  width: 1.5cqw;
+  height: 1.5cqw;
+}
+
+body.scene-mode #status {
+  font-size: 1.3cqw;
+}
+
+body.scene-mode #wave {
+  height: 2.4cqw;
+}
+
+body.scene-mode #suggestions {
+  gap: 0.8cqw;
+}
+
+body.scene-mode #suggestions button {
+  font-size: 1.15cqw;
+  padding: 0.6cqw 1.4cqw;
+}

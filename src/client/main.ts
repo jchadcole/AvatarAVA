@@ -1,4 +1,4 @@
-import { createFace, type Face, type Renderer } from "./faces.ts";
+import { createFace, unlockAudio, type Face, type Renderer } from "./faces.ts";
 
 type ServerMessage =
   | { type: "say"; text: string; audio: string }
@@ -34,6 +34,26 @@ interface ScreenConfig {
   avatarShare: number;
   avaName: string;
   visitorName: string;
+  scene: SceneConfig;
+}
+
+interface SceneBox {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+/** The "image" renderer's picture and where its speech bubbles are (percent of the picture). */
+interface SceneConfig {
+  image: string;
+  aspectRatio: number;
+  avaBox: SceneBox;
+  callerBox: SceneBox;
+  fontSize: number;
+  avaColor: string;
+  callerColor: string;
+  idleText: string;
 }
 
 /** Names on the transcript lines, from show.json "screen". */
@@ -109,7 +129,17 @@ function handle(message: ServerMessage): void {
  * are recognized; Ava's words appear one by one, paced to the length of each
  * line's audio, so the text keeps up with her voice.
  */
-class Transcript {
+/** What the kiosk does with the words: a scrolling chat (portrait) or two speech bubbles (image scene). */
+interface TranscriptView {
+  visitor(text: string, final: boolean): void;
+  dropPartial(): void;
+  newReply(): void;
+  say(text: string, audio: string): void;
+  interrupt(): void;
+  clear(): void;
+}
+
+class Transcript implements TranscriptView {
   private partial: HTMLParagraphElement | null = null;
   private reply: HTMLParagraphElement | null = null;
   private queue: { words: string[]; msPerWord: number }[] = [];
@@ -211,7 +241,205 @@ class Transcript {
   }
 }
 
-const transcript = new Transcript();
+// ---- Speech bubbles (image scene) -------------------------------------------
+
+/**
+ * Types text into one speech bubble, a character at a time, shrinking the font
+ * so it stays inside the bubble.
+ */
+class Typer {
+  private text: HTMLParagraphElement;
+  /** Characters still to type, each with its delay. */
+  private queue: { chars: string[]; msPerChar: number }[] = [];
+  private timer: ReturnType<typeof setTimeout> | null = null;
+  /** Live mode (the visitor): type toward this text, quickly, as it changes. */
+  private target: string | null = null;
+
+  constructor(private box: HTMLElement) {
+    this.text = box.querySelector("p")!;
+  }
+
+  get shown(): string {
+    return this.text.textContent ?? "";
+  }
+
+  /** Empties the bubble (or shows fixed text) and stops any typing. */
+  reset(text = ""): void {
+    this.stop();
+    this.queue = [];
+    this.target = null;
+    this.text.textContent = text;
+    this.fit(true);
+  }
+
+  /** Adds a line, typed over durationMs (the length of its audio). */
+  append(line: string, durationMs: number): void {
+    const chars = [...(this.shown || this.queue.length ? " " : "") + line];
+    this.queue.push({ chars, msPerChar: Math.max(12, Math.min(70, durationMs / chars.length)) });
+    this.run();
+  }
+
+  /** Types toward text, keeping what already matches (speech-to-text revises its guesses). */
+  follow(text: string): void {
+    const shown = this.shown;
+    let same = 0;
+    while (same < shown.length && same < text.length && shown[same] === text[same]) same++;
+    if (same < shown.length) {
+      this.text.textContent = shown.slice(0, same);
+      this.fit(true);
+    }
+    this.target = text;
+    this.run();
+  }
+
+  /** Writes out the current line at once; with all, everything queued too. */
+  finish(all: boolean): void {
+    this.stop();
+    if (this.target !== null) this.text.textContent = this.target;
+    const rest = all ? this.queue.splice(0) : this.queue.splice(0, 1);
+    this.queue = [];
+    this.text.textContent += rest.map((item) => item.chars.join("")).join("");
+    this.target = null;
+    this.fit(false);
+  }
+
+  private stop(): void {
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = null;
+    this.box.classList.remove("typing");
+  }
+
+  private run(): void {
+    if (this.timer) return;
+    this.box.classList.add("typing");
+    this.tick();
+  }
+
+  private tick(): void {
+    let delay: number;
+    if (this.target !== null) {
+      const behind = this.target.length - this.shown.length;
+      if (behind <= 0) return this.stop();
+      // Catch up faster when the visitor is far ahead of the typing.
+      const step = Math.max(1, Math.ceil(behind / 12));
+      this.text.textContent = this.target.slice(0, this.shown.length + step);
+      delay = 22;
+    } else {
+      const item = this.queue[0];
+      if (!item) return this.stop();
+      this.text.textContent += item.chars.shift() ?? "";
+      if (!item.chars.length) this.queue.shift();
+      delay = item.msPerChar;
+    }
+    this.fit(false);
+    this.timer = setTimeout(() => {
+      this.timer = null;
+      this.tick();
+    }, delay);
+  }
+
+  /** Shrinks the text until it fits the bubble (down to 45%); past that, the newest words stay in view. */
+  private fit(fromTop: boolean): void {
+    const box = this.box;
+    let fit = fromTop ? 1 : Number(box.style.getPropertyValue("--fit") || 1);
+    box.style.setProperty("--fit", String(fit));
+    while (this.text.scrollHeight > box.clientHeight + 1 && fit > 0.45) {
+      fit = Math.round((fit - 0.05) * 100) / 100;
+      box.style.setProperty("--fit", String(fit));
+    }
+    box.classList.toggle("overflow", this.text.scrollHeight > box.clientHeight + 1);
+  }
+}
+
+/**
+ * The image scene's transcript: the AVA's words type into the robot's bubble in
+ * time with its voice, and the visitor's into the caller's bubble as they are
+ * heard. Each new turn replaces the bubble's text.
+ */
+class BubbleTranscript implements TranscriptView {
+  private ava = new Typer($("ava-bubble"));
+  private caller = new Typer($("caller-bubble"));
+  /** The next AVA line starts a new reply, so it replaces the bubble's text. */
+  private freshReply = true;
+  /** The visitor is mid-utterance; partial is true until speech-to-text confirms it. */
+  private visitorOpen = false;
+  private partial = false;
+
+  constructor(private idleText: string) {
+    this.ava.reset(idleText);
+  }
+
+  visitor(text: string, final: boolean): void {
+    if (!this.visitorOpen) {
+      this.caller.reset();
+      this.visitorOpen = true;
+    }
+    this.freshReply = true;
+    this.partial = !final;
+    $("caller-bubble").classList.toggle("partial", !final);
+    this.caller.follow(text);
+    if (final) this.visitorOpen = false;
+  }
+
+  dropPartial(): void {
+    // Nothing was heard: take back the guesses.
+    if (this.visitorOpen && this.partial) this.caller.reset();
+    this.visitorOpen = false;
+    this.partial = false;
+    $("caller-bubble").classList.remove("partial");
+  }
+
+  newReply(): void {
+    this.ava.finish(true);
+    this.freshReply = true;
+  }
+
+  say(text: string, audio: string): void {
+    if (!text.trim()) return;
+    if (this.freshReply) {
+      this.ava.reset();
+      this.freshReply = false;
+    }
+    // Base64 PCM16 at 24 kHz mono: its length gives the line's duration.
+    this.ava.append(text.trim(), ((audio.length * 3) / 4 / 2 / 24000) * 1000);
+  }
+
+  interrupt(): void {
+    this.ava.finish(false);
+  }
+
+  clear(): void {
+    this.ava.reset(this.idleText);
+    this.caller.reset();
+    this.freshReply = true;
+    this.visitorOpen = false;
+    this.partial = false;
+  }
+}
+
+/** Sets up the landscape scene: the picture, the bubbles' places, and the controls bar. */
+function showScene(scene: SceneConfig): void {
+  document.body.classList.add("scene-mode");
+  const frame = $("scene-frame");
+  frame.style.setProperty("--scene-ar", String(scene.aspectRatio));
+  frame.style.setProperty("--bubble-font", String(scene.fontSize));
+  frame.style.setProperty("--ava-ink", scene.avaColor);
+  frame.style.setProperty("--caller-ink", scene.callerColor);
+  $<HTMLImageElement>("scene-image").src = scene.image;
+  const place = (id: string, box: SceneBox) =>
+    Object.assign($(id).style, {
+      left: `${box.left}%`,
+      top: `${box.top}%`,
+      width: `${box.width}%`,
+      height: `${box.height}%`,
+    });
+  place("ava-bubble", scene.avaBox);
+  place("caller-bubble", scene.callerBox);
+  frame.append($("panel"));
+  $("scene").hidden = false;
+}
+
+let transcript: TranscriptView = new Transcript();
 
 // ---- Sound wave --------------------------------------------------------
 
@@ -355,6 +583,8 @@ function reportError(message: string): void {
 const START_TIMEOUT_MS = 20000;
 
 async function startVisit(): Promise<void> {
+  // The image scene plays the voice in this page, which browsers only allow after a tap.
+  if (document.body.classList.contains("scene-mode")) unlockAudio();
   startButton.disabled = true;
   // The visit status line is hidden until the visit starts, so report on the start screen.
   attractStatus.textContent = "Starting…";
@@ -502,6 +732,11 @@ async function init(): Promise<void> {
   const showInfo = await (await fetch("/api/show")).json();
   document.title = `${(showInfo.screen as ScreenConfig).avaName} · ${showInfo.company}`;
   showHeader(showInfo.screen as ScreenConfig);
+  if (showInfo.renderer === "image") {
+    const scene = (showInfo.screen as ScreenConfig).scene;
+    showScene(scene);
+    transcript = new BubbleTranscript(scene.idleText);
+  }
   $("attract-sub").textContent = `${showInfo.company}'s digital host. Tap to start a conversation.`;
   sandboxBadge.hidden = !showInfo.sandbox;
   prewarm = Boolean(showInfo.prewarm);

@@ -111,6 +111,14 @@ app.get("/api/show", (_req, res) => {
     screen: {
       ...screen,
       logo: screen.logo && !/^https?:\/\//.test(screen.logo) ? `/show-assets/${screen.logo}` : screen.logo,
+      scene: {
+        ...screen.scene,
+        image: !screen.scene.image
+          ? "/ava-scene.jpg"
+          : /^https?:\/\//.test(screen.scene.image)
+            ? screen.scene.image
+            : `/show-assets/${screen.scene.image}`,
+      },
     },
     sandbox,
     prewarm,
@@ -128,6 +136,11 @@ app.post("/api/kiosk-error", (req, res) => {
 
 app.post("/api/session", async (_req, res) => {
   try {
+    // The image scene has no face to start: the browser plays the voice itself.
+    if (renderer === "image") {
+      res.json({ renderer, sessionToken: "" });
+      return;
+    }
     const { sessionToken } =
       renderer === "anam"
         ? await createAnamSessionToken({ apiKey: env.anamApiKey!, avatarId })
@@ -235,7 +248,9 @@ server.listen(env.port, () => {
   console.log(`${show.avatarName} kiosk for ${show.eventName} on http://localhost:${env.port}`);
   console.log(`Backstage screen on http://localhost:${env.port}/backstage.html`);
   const face =
-    renderer === "anam"
+    renderer === "image"
+      ? "FACE: none, image scene with the conversation typing into its speech bubbles (no avatar service used)"
+      : renderer === "anam"
       ? `FACE: Anam (audio passthrough), avatar ${avatarId}`
       : `FACE: LiveAvatar ${env.liveAvatarSandbox ? "SANDBOX (free, ~1 minute sessions)" : "LIVE"} mode, avatar ${avatarId}${prewarm ? ", kept warm between visits" : ""}`;
   console.log(`${face}, voice ${voiceName}, model ${env.claudeModel}`);

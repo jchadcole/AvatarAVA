@@ -48,6 +48,16 @@
       </section>
     </main>
 
+    <!-- Landscape scene (renderer "image"): one picture, no face; the words type into its speech bubbles. -->
+    <main id="scene" hidden>
+      <div id="scene-frame">
+        <img id="scene-image" alt="" />
+        <div class="bubble" id="ava-bubble" aria-live="polite"><p></p></div>
+        <div class="bubble" id="caller-bubble" aria-live="polite"><p></p></div>
+        <!-- The Start button, talk button and suggestions move here from the portrait panel. -->
+      </div>
+    </main>
+
     <script type="module" src="app.js"></script>
   </body>
 </html>

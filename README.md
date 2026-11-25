@@ -131,6 +131,16 @@ For a fair test, run each face with the same questions and watch for three thing
 
 Anam has no "finished speaking" event for passthrough audio, so the kiosk estimates it from the audio length. LiveAvatar's prewarm and sandbox settings don't apply to Anam.
 
+## Image scene: no face, the words type into speech bubbles
+
+`AVA_RENDERER=image` (or `"renderer": "image"` in `show.json`) shows one landscape picture full screen instead of an avatar: the AVA virtual agent on the left, a contact-center agent in the middle and a caller on the right. The AVA's words type into the robot's speech bubble in time with its voice, and the visitor's words type into the caller's bubble as Deepgram hears them. Each new turn replaces the bubble's text, and long replies shrink to fit. Everything else is unchanged: the Genesys AVA (or Claude) answers, ElevenLabs speaks, the same guardrails apply. No LiveAvatar or Anam key is needed, and the kiosk page plays the voice itself.
+
+```bash
+AVA_RENDERER=image npm start
+```
+
+Use a landscape screen. The built-in picture is `public/ava-scene.jpg` (its bubbles are blank). To use your own, put it in `shows/<show>/assets/` and set `"screen": { "scene": { "image": "my-scene.png" } }`. The bubbles' blank areas are set in percent of the picture under `"scene"` as `"avaBox"` and `"callerBox"` (`left`, `top`, `width`, `height`), with `"aspectRatio"` (width / height), `"fontSize"` (largest text, percent of the picture's width), `"avaColor"`, `"callerColor"` and `"idleText"` (what the AVA's bubble says before Start). Screen settings are re-read on every page load, so reload the page after an edit.
+
 ## Licensing for shows
 
 Use a paid ElevenLabs plan for any show or recorded demo. Audio made on the free plan has no commercial rights, even after upgrading, so the server prints a `PLAN CHECK` warning at startup when the key is on the free plan. For a cloned presenter voice, get the presenter's written consent and use ElevenLabs' professional voice cloning on a plan that includes it.

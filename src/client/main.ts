@@ -1,4 +1,4 @@
-import { createFace, unlockAudio, type Face, type Renderer } from "./faces.ts";
+import { createFace, unlockAudio, voiceLevel, type Face, type Renderer } from "./faces.ts";
 
 type ServerMessage =
   | { type: "say"; text: string; audio: string }
@@ -54,6 +54,16 @@ interface SceneConfig {
   avaColor: string;
   callerColor: string;
   idleText: string;
+  wave: SceneWave;
+}
+
+interface SceneWave extends SceneBox {
+  enabled: boolean;
+  bars: number[];
+  spacing: number;
+  barWidth: number;
+  color: string;
+  glowColor: string;
 }
 
 /** Names on the transcript lines, from show.json "screen". */
@@ -435,6 +445,10 @@ function showScene(scene: SceneConfig): void {
     });
   place("ava-bubble", scene.avaBox);
   place("caller-bubble", scene.callerBox);
+  if (scene.wave.enabled) {
+    place("scene-wave", scene.wave);
+    sceneWave = scene.wave;
+  }
   frame.append($("panel"));
   $("scene").hidden = false;
 }
@@ -475,7 +489,60 @@ function drawWave(time: number): void {
       ctx.fillRect(i * bar + bar * 0.2, (height - h) / 2, bar * 0.6, h);
     });
   }
+  if (sceneWave) drawSceneWave(time, sceneWave);
   requestAnimationFrame(drawWave);
+}
+
+/** The image scene's wave, when it has one. */
+let sceneWave: SceneWave | null = null;
+/** Smoothed loudness driving the scene's wave, 0..1. */
+let sceneLevel = 0;
+
+/**
+ * Draws the scene's glowing bars: calm and barely breathing when nobody talks,
+ * jumping with the host's voice as it plays and with the visitor's microphone.
+ */
+function drawSceneWave(time: number, config: SceneWave): void {
+  const canvas = $<HTMLCanvasElement>("scene-wave");
+  const ratio = window.devicePixelRatio || 1;
+  const width = Math.round(canvas.clientWidth * ratio);
+  const height = Math.round(canvas.clientHeight * ratio);
+  if (!width || !height) return;
+  if (canvas.width !== width || canvas.height !== height) {
+    canvas.width = width;
+    canvas.height = height;
+  }
+  const state = document.body.dataset.state;
+  const voice = Math.min(1, voiceLevel() * 5);
+  const mic = state === "listening" ? Math.min(1, micLevel * 6) : 0;
+  const target = Math.max(voice, mic);
+  // Rise fast, fall slowly, so the bars read as speech rather than flicker.
+  sceneLevel += (target - sceneLevel) * (target > sceneLevel ? 0.45 : 0.12);
+
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+  ctx.clearRect(0, 0, width, height);
+  const n = config.bars.length;
+  const barWidth = config.barWidth * width;
+  const activity = Math.min(1, sceneLevel * 3);
+  ctx.fillStyle = config.color;
+  ctx.shadowColor = config.glowColor;
+  ctx.shadowBlur = barWidth * 2.2;
+  config.bars.forEach((rest, i) => {
+    const calm = 1 + 0.05 * Math.sin(time / 700 + i * 0.9);
+    // Each bar moves at its own pace, so the wave ripples instead of pumping as one block.
+    const wobble = 0.5 + 0.5 * Math.sin(time / (85 + i * 23) + i * 1.7) * Math.sin(time / (210 + i * 31));
+    const lively = 0.45 + sceneLevel * 1.5 * (0.55 + 0.75 * wobble);
+    const scale = calm * (1 - activity) + lively * activity;
+    const h = Math.min(height * 0.92, Math.max(barWidth, rest * height * scale));
+    const x = width / 2 + (i - (n - 1) / 2) * config.spacing * width - barWidth / 2;
+    const y = (height - h) / 2;
+    ctx.beginPath();
+    ctx.roundRect(x, y, barWidth, h, barWidth / 2);
+    // Twice for a stronger glow, like the light in the picture.
+    ctx.fill();
+    ctx.fill();
+  });
 }
 
 // ---- Header ------------------------------------------------------------

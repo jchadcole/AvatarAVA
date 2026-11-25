@@ -141,6 +141,8 @@ AVA_RENDERER=image npm start
 
 Use a landscape screen. The built-in picture is `public/ava-scene.jpg` (its bubbles are blank). To use your own, put it in `shows/<show>/assets/` and set `"screen": { "scene": { "image": "my-scene.png" } }`. The bubbles' blank areas are set in percent of the picture under `"scene"` as `"avaBox"` and `"callerBox"` (`left`, `top`, `width`, `height`), with `"aspectRatio"` (width / height), `"fontSize"` (largest text, percent of the picture's width), `"avaColor"`, `"callerColor"` and `"idleText"` (what the AVA's bubble says before Start). Screen settings are re-read on every page load, so reload the page after an edit.
 
+The glowing sound wave between the agent and the caller moves with the sound: it jumps with AVA's voice as it plays and with the visitor's microphone while they hold to talk, and rests calmly otherwise. The built-in picture has its own bars painted out so the animated ones replace them. With your own picture, set `"wave"` under `"scene"` (`left`, `top`, `width`, `height` in percent, resting `bars` heights, `spacing`, `barWidth`, `color`, `glowColor`), or `"wave": { "enabled": false }` to turn it off.
+
 ## Licensing for shows
 
 Use a paid ElevenLabs plan for any show or recorded demo. Audio made on the free plan has no commercial rights, even after upgrading, so the server prints a `PLAN CHECK` warning at startup when the key is on the free plan. For a cloned presenter voice, get the presenter's written consent and use ElevenLabs' professional voice cloning on a plan that includes it.

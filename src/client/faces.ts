@@ -28,11 +28,29 @@ export function createFace(renderer: Renderer, sessionToken: string): Face {
 
 /** One audio output for the voice-only face, made on the visitor's tap so the browser lets it play. */
 let speaker: AudioContext | null = null;
+/** Measures the voice as it plays, for the scene's sound-wave animation. */
+let meter: AnalyserNode | null = null;
+let meterData: Float32Array<ArrayBuffer> | null = null;
 
 /** Call from a tap or click: browsers only start audio after the visitor touches the page. */
 export function unlockAudio(): void {
-  speaker ??= new AudioContext({ sampleRate: 24000 });
+  if (!speaker) {
+    speaker = new AudioContext({ sampleRate: 24000 });
+    meter = speaker.createAnalyser();
+    meter.fftSize = 512;
+    meter.connect(speaker.destination);
+    meterData = new Float32Array(meter.fftSize);
+  }
   void speaker.resume();
+}
+
+/** How loud the host's voice is right now (RMS, about 0 to 0.5), when the page plays it. */
+export function voiceLevel(): number {
+  if (!meter || !meterData) return 0;
+  meter.getFloatTimeDomainData(meterData);
+  let sum = 0;
+  for (const v of meterData) sum += v * v;
+  return Math.sqrt(sum / meterData.length);
 }
 
 /**
@@ -60,7 +78,7 @@ class VoiceOnlyFace implements Face {
     for (let i = 0; i < pcm.length; i++) samples[i] = pcm[i] / 0x8000;
     const source = context.createBufferSource();
     source.buffer = buffer;
-    source.connect(context.destination);
+    source.connect(meter ?? context.destination);
     // Lines play back to back, with no gap or overlap.
     const at = Math.max(context.currentTime + 0.02, this.playsUntil);
     source.start(at);

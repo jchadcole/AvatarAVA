@@ -453,6 +453,11 @@ body.scene-mode #kiosk {
   object-fit: fill;
 }
 
+#scene-wave {
+  position: absolute;
+  pointer-events: none;
+}
+
 /* The blank part of a speech bubble. The text shrinks (--fit) to stay inside it. */
 .bubble {
   --fit: 1;

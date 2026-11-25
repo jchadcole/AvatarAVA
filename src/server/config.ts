@@ -22,6 +22,27 @@ const SceneBox = z.object({
 });
 
 /**
+ * The animated sound wave in the scene. Its box is in percent of the picture; bar
+ * heights are fractions of the box's height, and spacing and barWidth fractions of
+ * its width. The defaults sit on the wave in the built-in picture, whose own bars
+ * were painted out.
+ */
+const SceneWave = z.object({
+  /** false: no animated wave (use with a picture that keeps its own bars). */
+  enabled: z.boolean().default(true),
+  left: z.number().min(0).max(100).default(52.45),
+  top: z.number().min(0).max(100).default(59.26),
+  width: z.number().min(1).max(100).default(9.81),
+  height: z.number().min(1).max(100).default(20),
+  /** Resting height of each bar, left to right. */
+  bars: z.array(z.number().min(0).max(1)).min(1).default([0.088, 0.176, 0.333, 0.245, 0.495, 0.296, 0.269, 0.185, 0.088]),
+  spacing: z.number().positive().default(0.0936),
+  barWidth: z.number().positive().default(0.042),
+  color: z.string().default("#ffffff"),
+  glowColor: z.string().default("#4d9fff"),
+});
+
+/**
  * The "image" renderer: one landscape picture, full screen, with the AVA's words
  * typing into one speech bubble and the visitor's into another. The defaults fit
  * the built-in picture (public/ava-scene.jpg, a robot, an agent and a caller).
@@ -42,6 +63,8 @@ const SceneScreen = z.object({
   callerColor: z.string().default("#14213d"),
   /** What the AVA's bubble says before a visit starts. "" leaves it empty. */
   idleText: z.string().default("Hi! Tap Start and ask me anything."),
+  /** The glowing sound wave drawn over the picture, moving with the voice and the visitor's mic. */
+  wave: SceneWave.default(SceneWave.parse({})),
 });
 
 /** What the kiosk screen shows above the avatar. Text may use {{avatarName}}, {{company}} and {{eventName}}. */

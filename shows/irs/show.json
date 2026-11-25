@@ -1,0 +1,71 @@
+{
+  "id": "irs",
+  "eventName": "Public Sector Demo",
+  "company": "Genesys",
+  "avatarName": "Iris",
+  "renderer": "anam",
+  "avatarId": "",
+  "anamAvatarId": "858440e2-e755-40fb-a638-8496645fd40a",
+  "voice": "aura-2-orpheus-en",
+  "elevenLabsVoiceId": "Qm3vYqvY6yNUsbo2dIyn",
+  "language": "en",
+  "brain": "genesys",
+  "genesys": {
+    "region": "mypurecloud.com",
+    "deploymentId": "cc7224fb-c07c-4639-92e2-e95df6f3725b",
+    "origin": "https://ava-kiosk.example.com",
+    "replyTimeoutMs": 10000,
+    "waitForScreening": false,
+    "warmUpText": "Hello"
+  },
+  "greeting": "Hi, I'm Iris, a virtual assistant for federal tax refunds, IRS notices and payments, running on Genesys Cloud.",
+  "suggestedQuestions": [
+    "Where is my federal tax refund?",
+    "I already paid a notice. What now?",
+    "How do IRS payment plans work?",
+    "What should I do if I get an IRS notice?"
+  ],
+  "keyterms": [
+    "IRS",
+    "Iris",
+    "refund",
+    "federal tax refund",
+    "notice",
+    "payment plan",
+    "installment agreement",
+    "Genesys"
+  ],
+  "blockedTerms": [
+    "guarantee",
+    "lawsuit"
+  ],
+  "competitors": [],
+  "idleResetSeconds": 45,
+  "maxStrikes": 2,
+  "maxTurnsInMemory": 8,
+  "maxVisitorChars": 600,
+  "cannedLines": {
+    "didNotCatch": "Sorry, it's a bit loud in here. Could you say that again?",
+    "suggest": "No problem. You can also tap one of the questions on the screen.",
+    "deflectAbuse": "Let's keep it friendly. I'm happy to help with refunds, notices or payments, though.",
+    "endSession": "I'll step back for now. Thanks for stopping by!",
+    "deflectInjection": "Nice try! I stick to refunds, notices and payments. What can I help you check?",
+    "safeFallback": "I'd better let one of my human teammates answer that one. They're right here at the booth.",
+    "error": "Sorry, I lost my train of thought. Could you ask that again?",
+    "goodbye": "Thanks for chatting. Enjoy the rest of the show!"
+  },
+  "screen": {
+    "headline": "Meet Iris",
+    "accentText": "Iris",
+    "accentColor": "#ff4f1f",
+    "waveColor": "#5468ff",
+    "backgroundColor": "#0b1626",
+    "logo": "",
+    "logoText": "GENESYS",
+    "subtitle": "",
+    "videoFit": "cover",
+    "avatarShare": 0.6,
+    "avaName": "Iris",
+    "visitorName": "You"
+  }
+}

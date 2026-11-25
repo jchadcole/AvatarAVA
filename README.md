@@ -49,7 +49,7 @@ npm start              # http://localhost:3000
 | `DEEPGRAM_TTS_MODEL` | Optional override for the show's `voice` |
 | `CLAUDE_MODEL`, `CLAUDE_EFFORT` | Defaults `claude-opus-5-5` at `low` effort for fast spoken replies |
 | `CLAUDE_CLASSIFIER_MODEL` | Model for the input safety classifier (default `claude-haiku-4-5`, chosen for speed) |
-| `SHOW` | Which folder under `shows/` to load (default `demo`) |
+| `SHOW` | Which folder under `shows/` to load (default `irs`; `demo` is the Genesys booth host) |
 
 The kiosk server runs on the booth PC. Open it full screen in Chrome kiosk mode, for example `chrome --kiosk --autoplay-policy=no-user-gesture-required http://localhost:3000`.
 

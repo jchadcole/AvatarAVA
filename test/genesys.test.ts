@@ -51,6 +51,12 @@ async function mockGenesys(opts: { replies?: string[]; delayMs?: number; session
   return { server, url, received, origins };
 }
 
+async function collectWelcome(brain: GenesysBrain): Promise<string[]> {
+  const out: string[] = [];
+  for await (const message of brain.welcome()) out.push(message);
+  return out;
+}
+
 const servers: WebSocketServer[] = [];
 afterEach(() => {
   for (const s of servers.splice(0)) s.close();
@@ -157,7 +163,7 @@ describe("GenesysBrain", () => {
     const greeting = "Hi, I am Iris, the IRS Virtual Assistant. Before we get started, may I ask who I'm speaking with today?";
     const { brain } = await brainFor({ greeting, replies: ["Hi Chad! How can I help you today?"] }, { warmUpText: "Hello" });
     brain.prepare();
-    expect(await brain.welcome()).toBe(greeting);
+    expect(await collectWelcome(brain)).toEqual([greeting]);
     // After the warm-up took the welcome, a greeting-shaped reply is a real answer.
     expect(await collect(brain, "My name is Chad")).toEqual(["Hi Chad! How can I help you today?"]);
     brain.endVisit();
@@ -165,7 +171,7 @@ describe("GenesysBrain", () => {
 
   it("has no welcome when the warm-up is off", async () => {
     const { brain } = await brainFor({ greeting: "Hello there. How can I help you today?" }, { warmUpText: "" });
-    expect(await brain.welcome()).toBeUndefined();
+    expect(await collectWelcome(brain)).toEqual([]);
     brain.endVisit();
   });
 
@@ -175,7 +181,7 @@ describe("GenesysBrain", () => {
       { contentType: "QuickReply", quickReply: { text: "Payment plans", payload: "plans", action: "Message" } },
     ];
     const { brain } = await brainFor({ greeting: "Hi, I am Iris. What can I help with?", content, replies: ["Sure."] }, { warmUpText: "Hello" });
-    await brain.welcome();
+    await collectWelcome(brain);
     expect(brain.suggestions).toEqual(["Check my refund", "Payment plans"]);
     brain.endVisit();
     expect(brain.suggestions).toEqual([]);
@@ -342,7 +348,9 @@ describe("Conversation start", () => {
       async *reply() {
         yield "unused";
       },
-      welcome: async () => "Hi, I am Iris, the IRS Virtual Assistant. May I ask who I'm speaking with today?",
+      async *welcome() {
+        yield "Hi, I am Iris, the IRS Virtual Assistant. May I ask who I'm speaking with today?";
+      },
       suggestions: ["Check my refund"],
     });
     await conversation.greet();
@@ -352,12 +360,46 @@ describe("Conversation start", () => {
     conversation.endVisit("idle");
   });
 
+  it("voices the AVA's welcome while the face is still loading", async () => {
+    const voiced: string[] = [];
+    const sent: ServerMessage[] = [];
+    const conversation = new Conversation({
+      show,
+      brain: {
+        async *reply() {
+          yield "unused";
+        },
+        async *welcome() {
+          yield "Hi, I am Iris.";
+        },
+        suggestions: [],
+      },
+      classifier: { classify: async () => "normal" },
+      tts: {
+        synthesize: async (text) => {
+          voiced.push(text);
+          return Buffer.from(text);
+        },
+      },
+      log: { write: () => {} },
+      send: (m) => sent.push(m),
+      kioskId: "test",
+    });
+    conversation.prepareVisit();
+    await new Promise((r) => setTimeout(r, 10));
+    expect(voiced).toEqual(["Hi, I am Iris."]);
+    expect(sent.some((m) => m.type === "say")).toBe(false); // nothing is said before the face is up
+    await conversation.greet();
+    expect(sent.flatMap((m) => (m.type === "say" ? [m.text] : []))).toEqual(["Hi, I am Iris."]);
+    conversation.endVisit("idle");
+  });
+
   it("stays quiet and shows no Genesys questions when the AVA sends no welcome", async () => {
     const { conversation, said, chips } = start({
       async *reply() {
         yield "unused";
       },
-      welcome: async () => undefined,
+      async *welcome() {},
       suggestions: [],
     });
     await conversation.greet();
@@ -373,7 +415,9 @@ describe("Conversation start", () => {
         options = ["Yes", "No"];
         yield "Did you already pay the notice?";
       },
-      welcome: async () => "Hello.",
+      async *welcome() {
+        yield "Hello.";
+      },
       get suggestions() {
         return options;
       },

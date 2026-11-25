@@ -167,7 +167,9 @@ backstage.on("connection", (socket) => {
 
 /** Messages the kiosk page sends. Binary frames are PCM16 16 kHz mic audio. */
 type ClientMessage =
-  | { type: "start_visit" }
+  | { type: "visit_starting" }
+  | { type: "visit_cancelled" }
+  | { type: "start_visit"; faceMs?: number }
   | { type: "ptt_start" }
   | { type: "ptt_end" }
   | { type: "ask"; text: string }
@@ -203,8 +205,14 @@ wss.on("connection", (socket) => {
       return;
     }
     switch (message.type) {
+      case "visit_starting":
+        conversation.prepareVisit();
+        break;
+      case "visit_cancelled":
+        conversation.cancelVisit();
+        break;
       case "start_visit":
-        void conversation.greet();
+        void conversation.greet(typeof message.faceMs === "number" ? message.faceMs : undefined);
         break;
       case "ptt_start":
         conversation.startListening();

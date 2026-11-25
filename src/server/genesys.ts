@@ -114,6 +114,24 @@ function isHello(text: string): boolean {
   return text.trim().length <= 30 && /^(hi|hello|hey|good (morning|afternoon|evening))\b/i.test(text.trim());
 }
 
+function seconds(ms: number): string {
+  return `${(ms / 1000).toFixed(1)} s`;
+}
+
+/** Welcome messages collected for one chat, and a way to wake whoever is waiting for them. */
+function newGreeting() {
+  const greeting = {
+    parts: [] as string[],
+    done: false,
+    wake: () => {},
+    finish() {
+      greeting.done = true;
+      greeting.wake();
+    },
+  };
+  return greeting;
+}
+
 export class GenesysBrain implements Brain {
   readonly name = "Genesys AVA";
   /** How long the AVA took to send its first words, from when the question was sent. */
@@ -121,6 +139,8 @@ export class GenesysBrain implements Brain {
   /** What the bot said to the warm-up message: Ava's greeting. */
   lastWarmUpReply: string | undefined;
   private latestOptions: string[] = [];
+  /** The current chat's welcome messages as they arrive, for welcome(). */
+  private greeting = newGreeting();
   private socket: WebSocket | null = null;
   private ready: Promise<WebSocket> | null = null;
   private token = randomUUID();
@@ -239,15 +259,20 @@ export class GenesysBrain implements Brain {
     }
   }
 
-  /** The AVA's own welcome, once the warm-up is done; undefined if it sent none. */
-  async welcome(): Promise<string | undefined> {
-    if (!(this.opts.warmUpText ?? "Hello")) return undefined;
-    try {
-      await this.connect();
-    } catch {
-      return undefined;
+  /**
+   * The AVA's own welcome, each chat message as soon as it arrives, so Ava can
+   * start speaking the first one while the rest are still coming.
+   */
+  async *welcome(): AsyncIterable<string> {
+    if (!(this.opts.warmUpText ?? "Hello")) return;
+    this.connect().catch(() => {});
+    const greeting = this.greeting;
+    let next = 0;
+    while (true) {
+      if (next < greeting.parts.length) yield greeting.parts[next++];
+      else if (greeting.done) return;
+      else await new Promise<void>((resolve) => (greeting.wake = resolve));
     }
-    return this.lastWarmUpReply;
   }
 
   /** The visitor left: drop this chat so the next visitor starts a new one. */
@@ -263,6 +288,7 @@ export class GenesysBrain implements Brain {
     this.token = randomUUID();
     this.lastWarmUpReply = undefined;
     this.latestOptions = [];
+    this.greeting.finish();
   }
 
   /**
@@ -272,13 +298,20 @@ export class GenesysBrain implements Brain {
    */
   private warmUp(socket: WebSocket): Promise<void> {
     const text = this.opts.warmUpText ?? "Hello";
-    if (!text) return Promise.resolve();
+    const greeting = this.greeting;
+    if (!text) {
+      greeting.finish();
+      return Promise.resolve();
+    }
+    const sentAt = Date.now();
     return new Promise<void>((resolve) => {
       let quiet: NodeJS.Timeout | undefined;
       const done = () => {
         clearTimeout(cap);
         clearTimeout(quiet);
         this.listeners.delete(listener);
+        if (!greeting.parts.length) console.warn(`GENESYS: the AVA sent no welcome within ${this.opts.replyTimeoutMs / 1000} s.`);
+        greeting.finish();
         resolve();
       };
       const cap = setTimeout(done, this.opts.replyTimeoutMs);
@@ -288,6 +321,9 @@ export class GenesysBrain implements Brain {
         if (options.length) this.latestOptions = options;
         const reply = message.body.text?.trim();
         if (!reply) return;
+        if (!greeting.parts.length) console.log(`GENESYS: the AVA's welcome arrived ${seconds(Date.now() - sentAt)} after the chat opened.`);
+        greeting.parts.push(reply);
+        greeting.wake();
         this.lastWarmUpReply = this.lastWarmUpReply ? `${this.lastWarmUpReply} ${reply}` : reply;
         clearTimeout(quiet);
         quiet = setTimeout(done, this.opts.quietMs);
@@ -305,6 +341,9 @@ export class GenesysBrain implements Brain {
     const state = this.socket?.readyState;
     if (this.ready && (state === WebSocket.CONNECTING || state === WebSocket.OPEN)) return this.ready;
     const { region, deploymentId, origin, url, replyTimeoutMs } = this.opts;
+    this.greeting.finish();
+    const greeting = (this.greeting = newGreeting());
+    const openedAt = Date.now();
     const socket = new WebSocket(url ?? webMessagingUrl(region, deploymentId), origin ? { origin } : undefined);
     this.socket = socket;
     socket.on("message", (data) => {
@@ -327,6 +366,7 @@ export class GenesysBrain implements Brain {
       }, replyTimeoutMs);
       const fail = (err: Error) => {
         clearTimeout(timer);
+        greeting.finish();
         if (this.socket === socket) {
           this.socket = null;
           this.ready = null;
@@ -353,6 +393,7 @@ export class GenesysBrain implements Brain {
           return;
         }
         clearTimeout(timer);
+        console.log(`GENESYS: chat opened in ${seconds(Date.now() - openedAt)}.`);
         socket.removeAllListeners("close");
         socket.on("close", () => {
           if (this.socket === socket) {
@@ -399,8 +440,8 @@ export class FallbackBrain implements Brain {
     this.primary.prepare?.();
   }
 
-  welcome(): Promise<string | undefined> {
-    return this.primary.welcome?.() ?? Promise.resolve(undefined);
+  async *welcome(): AsyncIterable<string> {
+    if (this.primary.welcome) yield* this.primary.welcome();
   }
 
   /** The primary's quick replies, unless the backup answered the last turn. */

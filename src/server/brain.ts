@@ -25,10 +25,10 @@ export interface Brain {
   prepare?(): void;
   /**
    * For a brain that greets visitors itself (the Genesys AVA): its welcome,
-   * spoken instead of the show's greeting. Resolves to undefined when it sent
-   * none in time.
+   * spoken instead of the show's greeting, one chat message at a time as they
+   * arrive. Ends without any when it sent none in time.
    */
-  welcome?(): Promise<string | undefined>;
+  welcome?(): AsyncIterable<string>;
   /**
    * Tap-to-ask options the brain attached to its latest message (Genesys quick
    * replies). Undefined for a brain that never sends any, so the show's own

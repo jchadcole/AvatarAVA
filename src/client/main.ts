@@ -358,6 +358,9 @@ async function startVisit(): Promise<void> {
   startButton.disabled = true;
   // The visit status line is hidden until the visit starts, so report on the start screen.
   attractStatus.textContent = "Starting…";
+  // Ava's chat and her first words get ready on the server while the face loads.
+  const tappedAt = performance.now();
+  send({ type: "visit_starting" });
   const opening = (async () => {
     if (warming) await warming;
     const ready = spare ?? (await openSession());
@@ -375,12 +378,13 @@ async function startVisit(): Promise<void> {
     session = await Promise.race([opening, timeout]);
     attractStatus.textContent = "";
     document.body.classList.add("in-visit");
-    send({ type: "start_visit" });
+    send({ type: "start_visit", faceMs: Math.round(performance.now() - tappedAt) });
   } catch (err) {
     console.error("[kiosk] Start failed:", err);
     reportError(`Start failed: ${describe(err)}`);
     attractStatus.textContent = "The avatar is taking a break. Please ask a booth teammate.";
     session = null;
+    send({ type: "visit_cancelled" });
     // A session that turns up after we gave up is closed, not left running (and billing).
     if (timedOut) void opening.then((late) => late.stop()).catch(() => {});
   } finally {

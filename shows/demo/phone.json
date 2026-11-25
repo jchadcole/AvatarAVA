@@ -1,0 +1,15 @@
+{
+  "greeting": "Hi, you've reached Ava, the Genesys digital host. Ask me anything about Genesys Cloud and our AI for customer experience.",
+  "cannedLines": {
+    "didNotCatch": "Sorry, I didn't quite catch that. Could you say it again?",
+    "suggest": "No problem. You could ask me what Genesys Cloud is, what the Agentic Virtual Agent can do, or how copilots help agents.",
+    "endSession": "I'll end the call here. Thanks for calling!",
+    "safeFallback": "That one is best answered by one of my human teammates. Your Genesys contact will be glad to help.",
+    "goodbye": "Thanks for calling. Goodbye!"
+  },
+  "idleResetSeconds": 40,
+  "maxCallMinutes": 10,
+  "bargeIn": true,
+  "bargeInMinWords": 2,
+  "endpointingMs": 400
+}

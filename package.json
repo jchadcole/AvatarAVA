@@ -13,7 +13,9 @@
     "start": "npm run build:client && tsx src/server/index.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "genesys:check": "tsx scripts/genesys-check.ts"
+    "genesys:check": "tsx scripts/genesys-check.ts",
+    "phone": "npm run build:client && tsx src/server/phone/index.ts",
+    "phone:test-call": "tsx scripts/phone-test-call.ts"
   },
   "dependencies": {
     "@anam-ai/js-sdk": "^4.29.3",

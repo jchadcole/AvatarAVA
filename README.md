@@ -26,6 +26,10 @@ LiveAvatar web SDK <--say(audio)--
 - **Visits:** a visitor taps Start, talks with push-to-talk (button or spacebar) or taps a suggested question. Memory is wiped when the visit ends on idle, on repeated abuse, or on a staff reset (tap the top-left corner three times).
 - **Logs:** text-only transcripts with guardrail labels and first-sentence latency, one JSON line per event in `logs/YYYY-MM-DD.jsonl`. No audio or video is stored.
 
+## Phone version
+
+Callers can also dial a Genesys Cloud number and talk to Ava with the same brain, guardrails and voices, voice only. It runs separately with `npm run phone`; see [docs/PHONE.md](docs/PHONE.md).
+
 ## Run it
 
 Requires Node 20+ and Chrome on the kiosk.

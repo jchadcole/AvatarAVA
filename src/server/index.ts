@@ -118,6 +118,13 @@ app.get("/api/show", (_req, res) => {
   });
 });
 
+// The kiosk page reports its own errors here so they show up in this Terminal window.
+app.post("/api/kiosk-error", (req, res) => {
+  const message = typeof req.body?.message === "string" ? req.body.message.slice(0, 2000) : "(no message)";
+  console.error(`KIOSK ERROR (from the browser): ${message}`);
+  res.status(204).end();
+});
+
 app.post("/api/session", async (_req, res) => {
   try {
     const { sessionToken } =
@@ -131,8 +138,8 @@ app.post("/api/session", async (_req, res) => {
           });
     res.json({ renderer, sessionToken });
   } catch (err) {
-    console.error(err);
-    res.status(502).json({ error: "Could not start the avatar session." });
+    console.error(`FACE ERROR: could not get a ${renderer} session. ${(err as Error).message}`);
+    res.status(502).json({ error: "Could not start the avatar session.", detail: (err as Error).message });
   }
 });
 

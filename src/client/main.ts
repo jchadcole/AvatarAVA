@@ -328,6 +328,25 @@ function warmUp(): void {
     });
 }
 
+function describe(err: unknown): string {
+  if (err instanceof Error) return err.message || err.name;
+  if (typeof err === "object" && err) {
+    try {
+      return JSON.stringify(err);
+    } catch {}
+  }
+  return String(err);
+}
+
+/** Sends a kiosk error to the server, so it shows in the Terminal window too. */
+function reportError(message: string): void {
+  void fetch("/api/kiosk-error", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message: message.slice(0, 2000) }),
+  }).catch(() => {});
+}
+
 /** The longest a visitor waits after tapping Start before we say something went wrong. */
 const START_TIMEOUT_MS = 20000;
 
@@ -355,6 +374,7 @@ async function startVisit(): Promise<void> {
     send({ type: "start_visit" });
   } catch (err) {
     console.error("[kiosk] Start failed:", err);
+    reportError(`Start failed: ${describe(err)}`);
     attractStatus.textContent = "The avatar is taking a break. Please ask a booth teammate.";
     session = null;
     // A session that turns up after we gave up is closed, not left running (and billing).

@@ -259,7 +259,7 @@ export function readEnv(env: NodeJS.ProcessEnv = process.env): Env {
   return {
     port: Number(env.PORT ?? 3000),
     kioskId: env.KIOSK_ID ?? "booth-1",
-    showName: env.SHOW ?? "irs",
+    showName: env.SHOW ?? "demo",
     logDir: env.LOG_DIR ?? "logs",
     claudeModel: env.CLAUDE_MODEL || "claude-opus-5-5",
     classifierModel: env.CLAUDE_CLASSIFIER_MODEL || "claude-haiku-4-5",

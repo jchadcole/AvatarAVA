@@ -143,7 +143,7 @@ Use a landscape screen. The built-in picture is `public/ava-scene.jpg` (its bubb
 
 The glowing sound wave between the agent and the caller moves with the sound: it jumps with AVA's voice as it plays and with the visitor's microphone while they hold to talk, and rests calmly otherwise. The built-in picture has its own bars painted out so the animated ones replace them. With your own picture, set `"wave"` under `"scene"` (`left`, `top`, `width`, `height` in percent, resting `bars` heights, `spacing`, `barWidth`, `color`, `glowColor`), or `"wave": { "enabled": false }` to turn it off.
 
-The robot has a mouth drawn over the picture: human-shaped, slightly open, made of light. It never opens or closes; while AVA speaks, its light blinks with each syllable of the voice, and at rest it glows faintly. Move or resize it with `"mouth"` under `"scene"` (`left`, `top`, `width`, `height` in percent, `size`, `color`, `glowColor`), or turn it off with `"mouth": { "enabled": false }`.
+The robot has a mouth drawn over the picture: a recessed speaker slot with a row of light segments. It never changes shape; while AVA speaks, the segments blink with each syllable of the voice (louder sounds light more of them, from the center out), and at rest they glow faintly. Move or resize it with `"mouth"` under `"scene"` (`left`, `top`, `width`, `height` in percent, `size`, `color`, `glowColor`), or turn it off with `"mouth": { "enabled": false }`.
 
 ## Licensing for shows
 

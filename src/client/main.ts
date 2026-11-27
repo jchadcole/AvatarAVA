@@ -525,9 +525,10 @@ function fitCanvas(canvas: HTMLCanvasElement): boolean {
 }
 
 /**
- * Draws the robot's mouth: human-shaped, slightly open, made of light. It never
- * opens or closes; while AVA speaks its light blinks with each syllable of her
- * voice, with a soft shimmer along the lips. At rest it glows faintly, like the eyes.
+ * Draws the robot's mouth: a recessed speaker slot with a row of light segments,
+ * like a real robot's display. It never changes shape; while AVA speaks its
+ * lights blink with each syllable of her voice, spreading from the center on
+ * louder sounds. At rest the segments glow faintly, like the eyes.
  */
 function drawSceneMouth(time: number, config: SceneMouth): void {
   const canvas = $<HTMLCanvasElement>("scene-mouth");
@@ -539,6 +540,7 @@ function drawSceneMouth(time: number, config: SceneMouth): void {
   const target = Math.min(1, Math.max(0, (voiceLevel() * 6 - 0.15) * 1.4));
   mouthLevel += (target - mouthLevel) * (target > mouthLevel ? 0.7 : 0.3);
   const glow = mouthLevel;
+  const ratio = window.devicePixelRatio || 1;
 
   const { width, height } = canvas;
   ctx.clearRect(0, 0, width, height);
@@ -547,54 +549,40 @@ function drawSceneMouth(time: number, config: SceneMouth): void {
   const w = (config.size * width) / 2; // half the mouth's width
   ctx.scale(w, w);
 
-  // Shapes in units of half the mouth's width, centered on the mouth.
-  const outer = new Path2D();
-  outer.moveTo(-1, 0);
-  outer.bezierCurveTo(-0.7, -0.18, -0.4, -0.36, -0.18, -0.3); // upper lip, left
-  outer.quadraticCurveTo(-0.06, -0.26, 0, -0.2); // cupid's bow
-  outer.quadraticCurveTo(0.06, -0.26, 0.18, -0.3);
-  outer.bezierCurveTo(0.4, -0.36, 0.7, -0.18, 1, 0); // upper lip, right
-  outer.bezierCurveTo(0.7, 0.42, 0.35, 0.52, 0, 0.52); // lower lip
-  outer.bezierCurveTo(-0.35, 0.52, -0.7, 0.42, -1, 0);
-  outer.closePath();
+  // The recessed slot: dark, with a lit lower rim and a shadowed upper edge.
+  const slotH = 0.42;
+  const slot = new Path2D();
+  slot.roundRect(-1, -slotH / 2, 2, slotH, slotH / 2);
+  const recess = ctx.createLinearGradient(0, -slotH / 2, 0, slotH / 2);
+  recess.addColorStop(0, "rgba(10, 3, 2, 0.95)");
+  recess.addColorStop(1, "rgba(40, 12, 6, 0.9)");
+  ctx.fillStyle = recess;
+  ctx.fill(slot);
+  const rim = ctx.createLinearGradient(0, -slotH / 2, 0, slotH / 2);
+  rim.addColorStop(0, "rgba(60, 10, 0, 0.7)");
+  rim.addColorStop(1, "rgba(255, 190, 150, 0.55)");
+  ctx.lineWidth = 0.045;
+  ctx.strokeStyle = rim;
+  ctx.stroke(slot);
 
-  // The opening between the lips: just parted.
-  const opening = new Path2D();
-  opening.moveTo(-0.86, 0.02);
-  opening.bezierCurveTo(-0.5, -0.06, -0.2, -0.04, 0, -0.02);
-  opening.bezierCurveTo(0.2, -0.04, 0.5, -0.06, 0.86, 0.02);
-  opening.bezierCurveTo(0.5, 0.16, 0.2, 0.2, 0, 0.2);
-  opening.bezierCurveTo(-0.2, 0.2, -0.5, 0.16, -0.86, 0.02);
-  opening.closePath();
-
-  // Lips: a dark glossy shape, lit from within more as AVA speaks.
+  // The light segments: the center ones light first, the outer ones join on louder sounds.
+  const count = 7;
+  const gap = 0.06;
+  const inner = 2 - 0.22; // the slot's width less its rounded ends
+  const segW = (inner - gap * (count - 1)) / count;
+  const segH = slotH * 0.62;
   ctx.shadowColor = config.glowColor;
-  ctx.shadowBlur = (4 + glow * 22) * (window.devicePixelRatio || 1);
-  ctx.fillStyle = "rgba(28, 8, 4, 0.82)";
-  ctx.fill(outer);
-
-  // The lips' outline, in light, with a shimmer that drifts along it while she speaks.
-  const shimmer = ctx.createLinearGradient(-1, 0, 1, 0);
-  const at = (Math.sin(time / 420) + 1) / 2;
-  const base = 0.2 + glow * 0.8;
-  shimmer.addColorStop(0, withAlpha(config.color, base * 0.6));
-  shimmer.addColorStop(Math.max(0, at - 0.25), withAlpha(config.color, base));
-  shimmer.addColorStop(at, withAlpha(config.color, Math.min(1, base + glow * 0.5)));
-  shimmer.addColorStop(Math.min(1, at + 0.25), withAlpha(config.color, base));
-  shimmer.addColorStop(1, withAlpha(config.color, base * 0.6));
-  ctx.lineWidth = 0.05;
-  ctx.strokeStyle = shimmer;
-  ctx.stroke(outer);
-
-  // The opening emits the light: faint at rest, swelling and flickering softly with her voice.
-  const flicker = 1 + 0.12 * Math.sin(time / 70) * Math.sin(time / 190) * glow;
-  const inner = ctx.createRadialGradient(0, 0.08, 0, 0, 0.08, 0.9);
-  inner.addColorStop(0, withAlpha(config.color, Math.min(1, (0.25 + glow * 0.75) * flicker)));
-  inner.addColorStop(0.6, withAlpha(config.glowColor, Math.min(1, (0.15 + glow * 0.75) * flicker)));
-  inner.addColorStop(1, withAlpha(config.glowColor, 0.08 + glow * 0.5));
-  ctx.shadowBlur = (2 + glow * 30) * (window.devicePixelRatio || 1);
-  ctx.fillStyle = inner;
-  ctx.fill(opening);
+  for (let i = 0; i < count; i++) {
+    const fromCenter = Math.abs(i - (count - 1) / 2) / ((count - 1) / 2); // 0 center, 1 ends
+    const reach = Math.min(1, Math.max(0, glow * 1.6 - fromCenter * 0.9));
+    const flicker = 0.88 + 0.12 * Math.sin(time / (55 + i * 9) + i * 2.1);
+    const light = 0.16 + 0.84 * reach * (glow > 0.02 ? flicker : 1);
+    ctx.shadowBlur = (2 + reach * 14) * ratio;
+    ctx.fillStyle = withAlpha(light > 0.6 ? config.color : config.glowColor, light);
+    ctx.beginPath();
+    ctx.roundRect(-inner / 2 + i * (segW + gap), -segH / 2, segW, segH, segH / 2);
+    ctx.fill();
+  }
   ctx.restore();
 }
 

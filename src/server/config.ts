@@ -43,8 +43,8 @@ const SceneWave = z.object({
 });
 
 /**
- * The robot's mouth, drawn over the picture: a slightly open, human-shaped mouth
- * made of light that glows brighter and shimmers while AVA speaks. Its box is in
+ * The robot's mouth, drawn over the picture: a recessed speaker slot with a row
+ * of light segments that blink with each syllable while AVA speaks. Its box is in
  * percent of the picture; the mouth is centered in it.
  */
 const SceneMouth = z.object({
@@ -55,8 +55,8 @@ const SceneMouth = z.object({
   width: z.number().min(1).max(100).default(5.74),
   height: z.number().min(1).max(100).default(6.94),
   /** Mouth width as a share of the box's width (the rest leaves room for the glow). */
-  size: z.number().min(0.1).max(1).default(0.48),
-  /** The lips' light, and the glow that spreads from the mouth while AVA speaks. */
+  size: z.number().min(0.1).max(1).default(0.6),
+  /** The segments' light when lit, and the glow around them (and their color when dim). */
   color: z.string().default("#fff4e6"),
   glowColor: z.string().default("#ffd08a"),
 });

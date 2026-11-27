@@ -115,7 +115,7 @@ app.get("/api/show", (_req, res) => {
         ...screen.scene,
         image: !screen.scene.image
           ? "/ava-scene.jpg"
-          : /^https?:\/\//.test(screen.scene.image)
+          : /^(https?:\/\/|\/)/.test(screen.scene.image)
             ? screen.scene.image
             : `/show-assets/${screen.scene.image}`,
       },

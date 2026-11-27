@@ -54,6 +54,13 @@ interface SceneConfig {
   avaColor: string;
   callerColor: string;
   idleText: string;
+  avaTitle: string;
+  callerTitle: string;
+  avaTitleBox: SceneBox;
+  callerTitleBox: SceneBox;
+  titleSize: number;
+  avaTitleColor: string;
+  callerTitleColor: string;
   wave: SceneWave;
   mouth: SceneMouth;
 }
@@ -435,8 +442,28 @@ class BubbleTranscript implements TranscriptView {
   }
 }
 
+/** Writes a bubble heading, shrinking it until it fits its box. */
+function setTitle(id: string, text: string, color: string, box: SceneBox): void {
+  const el = $(id);
+  Object.assign(el.style, { left: `${box.left}%`, top: `${box.top}%`, width: `${box.width}%`, height: `${box.height}%`, color });
+  el.textContent = text;
+  el.hidden = !text;
+  const fit = () => {
+    let f = 1;
+    el.style.setProperty("--fit", "1");
+    while (el.scrollWidth > el.clientWidth + 1 && f > 0.5) {
+      f = Math.round((f - 0.04) * 100) / 100;
+      el.style.setProperty("--fit", String(f));
+    }
+  };
+  fit();
+  // Fonts and the window size change the text's width.
+  void document.fonts?.ready.then(fit);
+  window.addEventListener("resize", fit);
+}
+
 /** Sets up the landscape scene: the picture, the bubbles' places, and the controls bar. */
-function showScene(scene: SceneConfig): void {
+function showScene(scene: SceneConfig, names: { avaName: string; avatarName: string }): void {
   document.body.classList.add("scene-mode");
   const frame = $("scene-frame");
   frame.style.setProperty("--scene-ar", String(scene.aspectRatio));
@@ -453,6 +480,10 @@ function showScene(scene: SceneConfig): void {
     });
   place("ava-bubble", scene.avaBox);
   place("caller-bubble", scene.callerBox);
+  frame.style.setProperty("--title-font", String(scene.titleSize));
+  const fill = (text: string) => text.replaceAll("{{avaName}}", names.avaName).replaceAll("{{avatarName}}", names.avatarName);
+  setTitle("ava-title", fill(scene.avaTitle), scene.avaTitleColor, scene.avaTitleBox);
+  setTitle("caller-title", fill(scene.callerTitle), scene.callerTitleColor, scene.callerTitleBox);
   if (scene.mouth.enabled) {
     place("scene-mouth", scene.mouth);
     sceneMouth = scene.mouth;
@@ -902,7 +933,7 @@ async function init(): Promise<void> {
   showHeader(showInfo.screen as ScreenConfig);
   if (showInfo.renderer === "image") {
     const scene = (showInfo.screen as ScreenConfig).scene;
-    showScene(scene);
+    showScene(scene, { avaName: (showInfo.screen as ScreenConfig).avaName, avatarName: showInfo.avatarName as string });
     transcript = new BubbleTranscript(scene.idleText);
   }
   $("attract-sub").textContent = `${showInfo.company}'s digital host. Tap to start a conversation.`;

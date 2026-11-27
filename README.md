@@ -139,7 +139,18 @@ Anam has no "finished speaking" event for passthrough audio, so the kiosk estima
 AVA_RENDERER=image npm start
 ```
 
-Use a landscape screen. The built-in picture is `public/ava-scene.jpg` (its bubbles are blank). To use your own, put it in `shows/<show>/assets/` and set `"screen": { "scene": { "image": "my-scene.png" } }`. The bubbles' blank areas are set in percent of the picture under `"scene"` as `"avaBox"` and `"callerBox"` (`left`, `top`, `width`, `height`), with `"aspectRatio"` (width / height), `"fontSize"` (largest text, percent of the picture's width), `"avaColor"`, `"callerColor"` and `"idleText"` (what the AVA's bubble says before Start). Screen settings are re-read on every page load, so reload the page after an edit.
+Use a landscape screen. The built-in picture is `public/ava-scene.jpg` (its bubbles are blank).
+
+The bubbles' headings come from `show.json`, so each demo can name its own virtual agent. By default the robot's bubble says "AVA – Virtual Agent", built from the show's `"screen": { "avaName": ... }`, and the caller's says "Caller". To change them, set `"avaTitle"` and `"callerTitle"` under `"scene"`, for example:
+
+```json
+"screen": {
+  "avaName": "Nova",
+  "scene": { "avaTitle": "{{avaName}} – Virtual Agent", "callerTitle": "Caller" }
+}
+```
+
+`{{avaName}}` is replaced with `screen.avaName` and `{{avatarName}}` with the show's `avatarName`. Long headings shrink to fit the bubble. For a separate demo, copy `shows/demo` to `shows/<name>`, edit its `show.json`, and start with `SHOW=<name>`. To use your own, put it in `shows/<show>/assets/` and set `"screen": { "scene": { "image": "my-scene.png" } }`. The bubbles' blank areas are set in percent of the picture under `"scene"` as `"avaBox"` and `"callerBox"` (`left`, `top`, `width`, `height`), with `"aspectRatio"` (width / height), `"fontSize"` (largest text, percent of the picture's width), `"avaColor"`, `"callerColor"` and `"idleText"` (what the AVA's bubble says before Start). Screen settings are re-read on every page load, so reload the page after an edit.
 
 The glowing sound wave between the agent and the caller moves with the sound: it jumps with AVA's voice as it plays and with the visitor's microphone while they hold to talk, and rests calmly otherwise. The built-in picture has its own bars painted out so the animated ones replace them. With your own picture, set `"wave"` under `"scene"` (`left`, `top`, `width`, `height` in percent, resting `bars` heights, `spacing`, `barWidth`, `color`, `glowColor`), or `"wave": { "enabled": false }` to turn it off.
 

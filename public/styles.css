@@ -459,6 +459,20 @@ body.scene-mode #kiosk {
   pointer-events: none;
 }
 
+/* A bubble's heading ("AVA – Virtual Agent", "Caller"), from show.json; long names shrink to fit. */
+.bubble-title {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  white-space: nowrap;
+  overflow: hidden;
+  font-family: "Avenir Next Condensed", "Roboto Condensed", "Arial Narrow", "Helvetica Neue", Arial, sans-serif;
+  font-stretch: condensed;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  font-size: calc(var(--fit, 1) * var(--title-font, 1.95) * 1cqw);
+}
+
 /* The blank part of a speech bubble. The text shrinks (--fit) to stay inside it. */
 .bubble {
   --fit: 1;
@@ -598,4 +612,8 @@ body.scene-mode #suggestions {
 body.scene-mode #suggestions button {
   font-size: 1.15cqw;
   padding: 0.6cqw 1.4cqw;
+}
+
+.bubble-title[hidden] {
+  display: none;
 }

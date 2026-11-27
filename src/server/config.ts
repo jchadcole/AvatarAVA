@@ -80,6 +80,20 @@ const SceneScreen = z.object({
   /** Text color in the AVA's bubble and in the caller's bubble. */
   avaColor: z.string().default("#14213d"),
   callerColor: z.string().default("#14213d"),
+  /**
+   * Headings at the top of the two bubbles, next to their icons. {{avaName}} is the
+   * screen's avaName and {{avatarName}} the show's avatarName, so each demo's
+   * show.json can name its own virtual agent.
+   */
+  avaTitle: z.string().default("{{avaName}} – Virtual Agent"),
+  callerTitle: z.string().default("Caller"),
+  /** Where the headings go, in percent of the picture (to the right of each bubble's icon). */
+  avaTitleBox: SceneBox.default({ left: 23.1, top: 10.4, width: 19.6, height: 3.7 }),
+  callerTitleBox: SceneBox.default({ left: 73.7, top: 10.8, width: 18.4, height: 4 }),
+  /** Heading size in percent of the picture's width; long names shrink to fit. */
+  titleSize: z.number().positive().default(1.95),
+  avaTitleColor: z.string().default("#0d1b4f"),
+  callerTitleColor: z.string().default("#0d1b4f"),
   /** What the AVA's bubble says before a visit starts. "" leaves it empty. */
   idleText: z.string().default("Hi! Tap Start and ask me anything."),
   /** The glowing sound wave drawn over the picture, moving with the voice and the visitor's mic. */

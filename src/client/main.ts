@@ -1,4 +1,4 @@
-import { createFace, type Face, type Renderer } from "./faces.ts";
+import { createFace, unlockAudio, voiceLevel, type Face, type Renderer } from "./faces.ts";
 
 type ServerMessage =
   | { type: "say"; text: string; audio: string }
@@ -34,6 +34,51 @@ interface ScreenConfig {
   avatarShare: number;
   avaName: string;
   visitorName: string;
+  scene: SceneConfig;
+}
+
+interface SceneBox {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+/** The "image" renderer's picture and where its speech bubbles are (percent of the picture). */
+interface SceneConfig {
+  image: string;
+  aspectRatio: number;
+  avaBox: SceneBox;
+  callerBox: SceneBox;
+  fontSize: number;
+  avaColor: string;
+  callerColor: string;
+  idleText: string;
+  avaTitle: string;
+  callerTitle: string;
+  avaTitleBox: SceneBox;
+  callerTitleBox: SceneBox;
+  titleSize: number;
+  avaTitleColor: string;
+  callerTitleColor: string;
+  wave: SceneWave;
+  mouth: SceneMouth;
+}
+
+interface SceneMouth extends SceneBox {
+  enabled: boolean;
+  size: number;
+  color: string;
+  glowColor: string;
+}
+
+interface SceneWave extends SceneBox {
+  enabled: boolean;
+  bars: number[];
+  spacing: number;
+  barWidth: number;
+  color: string;
+  glowColor: string;
 }
 
 /** Names on the transcript lines, from show.json "screen". */
@@ -109,7 +154,17 @@ function handle(message: ServerMessage): void {
  * are recognized; Ava's words appear one by one, paced to the length of each
  * line's audio, so the text keeps up with her voice.
  */
-class Transcript {
+/** What the kiosk does with the words: a scrolling chat (portrait) or two speech bubbles (image scene). */
+interface TranscriptView {
+  visitor(text: string, final: boolean): void;
+  dropPartial(): void;
+  newReply(): void;
+  say(text: string, audio: string): void;
+  interrupt(): void;
+  clear(): void;
+}
+
+class Transcript implements TranscriptView {
   private partial: HTMLParagraphElement | null = null;
   private reply: HTMLParagraphElement | null = null;
   private queue: { words: string[]; msPerWord: number }[] = [];
@@ -211,7 +266,237 @@ class Transcript {
   }
 }
 
-const transcript = new Transcript();
+// ---- Speech bubbles (image scene) -------------------------------------------
+
+/**
+ * Types text into one speech bubble, a character at a time, shrinking the font
+ * so it stays inside the bubble.
+ */
+class Typer {
+  private text: HTMLParagraphElement;
+  /** Characters still to type, each with its delay. */
+  private queue: { chars: string[]; msPerChar: number }[] = [];
+  private timer: ReturnType<typeof setTimeout> | null = null;
+  /** Live mode (the visitor): type toward this text, quickly, as it changes. */
+  private target: string | null = null;
+
+  constructor(private box: HTMLElement) {
+    this.text = box.querySelector("p")!;
+  }
+
+  get shown(): string {
+    return this.text.textContent ?? "";
+  }
+
+  /** Empties the bubble (or shows fixed text) and stops any typing. */
+  reset(text = ""): void {
+    this.stop();
+    this.queue = [];
+    this.target = null;
+    this.text.textContent = text;
+    this.fit(true);
+  }
+
+  /** Adds a line, typed over durationMs (the length of its audio). */
+  append(line: string, durationMs: number): void {
+    const chars = [...(this.shown || this.queue.length ? " " : "") + line];
+    this.queue.push({ chars, msPerChar: Math.max(12, Math.min(70, durationMs / chars.length)) });
+    this.run();
+  }
+
+  /** Types toward text, keeping what already matches (speech-to-text revises its guesses). */
+  follow(text: string): void {
+    const shown = this.shown;
+    let same = 0;
+    while (same < shown.length && same < text.length && shown[same] === text[same]) same++;
+    if (same < shown.length) {
+      this.text.textContent = shown.slice(0, same);
+      this.fit(true);
+    }
+    this.target = text;
+    this.run();
+  }
+
+  /** Writes out the current line at once; with all, everything queued too. */
+  finish(all: boolean): void {
+    this.stop();
+    if (this.target !== null) this.text.textContent = this.target;
+    const rest = all ? this.queue.splice(0) : this.queue.splice(0, 1);
+    this.queue = [];
+    this.text.textContent += rest.map((item) => item.chars.join("")).join("");
+    this.target = null;
+    this.fit(false);
+  }
+
+  private stop(): void {
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = null;
+    this.box.classList.remove("typing");
+  }
+
+  private run(): void {
+    if (this.timer) return;
+    this.box.classList.add("typing");
+    this.tick();
+  }
+
+  private tick(): void {
+    let delay: number;
+    if (this.target !== null) {
+      const behind = this.target.length - this.shown.length;
+      if (behind <= 0) return this.stop();
+      // Catch up faster when the visitor is far ahead of the typing.
+      const step = Math.max(1, Math.ceil(behind / 12));
+      this.text.textContent = this.target.slice(0, this.shown.length + step);
+      delay = 22;
+    } else {
+      const item = this.queue[0];
+      if (!item) return this.stop();
+      this.text.textContent += item.chars.shift() ?? "";
+      if (!item.chars.length) this.queue.shift();
+      delay = item.msPerChar;
+    }
+    this.fit(false);
+    this.timer = setTimeout(() => {
+      this.timer = null;
+      this.tick();
+    }, delay);
+  }
+
+  /** Shrinks the text until it fits the bubble (down to 45%); past that, the newest words stay in view. */
+  private fit(fromTop: boolean): void {
+    const box = this.box;
+    let fit = fromTop ? 1 : Number(box.style.getPropertyValue("--fit") || 1);
+    box.style.setProperty("--fit", String(fit));
+    while (this.text.scrollHeight > box.clientHeight + 1 && fit > 0.45) {
+      fit = Math.round((fit - 0.05) * 100) / 100;
+      box.style.setProperty("--fit", String(fit));
+    }
+    box.classList.toggle("overflow", this.text.scrollHeight > box.clientHeight + 1);
+  }
+}
+
+/**
+ * The image scene's transcript: the AVA's words type into the robot's bubble in
+ * time with its voice, and the visitor's into the caller's bubble as they are
+ * heard. Each new turn replaces the bubble's text.
+ */
+class BubbleTranscript implements TranscriptView {
+  private ava = new Typer($("ava-bubble"));
+  private caller = new Typer($("caller-bubble"));
+  /** The next AVA line starts a new reply, so it replaces the bubble's text. */
+  private freshReply = true;
+  /** The visitor is mid-utterance; partial is true until speech-to-text confirms it. */
+  private visitorOpen = false;
+  private partial = false;
+
+  constructor(private idleText: string) {
+    this.ava.reset(idleText);
+  }
+
+  visitor(text: string, final: boolean): void {
+    if (!this.visitorOpen) {
+      this.caller.reset();
+      this.visitorOpen = true;
+    }
+    this.freshReply = true;
+    this.partial = !final;
+    $("caller-bubble").classList.toggle("partial", !final);
+    this.caller.follow(text);
+    if (final) this.visitorOpen = false;
+  }
+
+  dropPartial(): void {
+    // Nothing was heard: take back the guesses.
+    if (this.visitorOpen && this.partial) this.caller.reset();
+    this.visitorOpen = false;
+    this.partial = false;
+    $("caller-bubble").classList.remove("partial");
+  }
+
+  newReply(): void {
+    this.ava.finish(true);
+    this.freshReply = true;
+  }
+
+  say(text: string, audio: string): void {
+    if (!text.trim()) return;
+    if (this.freshReply) {
+      this.ava.reset();
+      this.freshReply = false;
+    }
+    // Base64 PCM16 at 24 kHz mono: its length gives the line's duration.
+    this.ava.append(text.trim(), ((audio.length * 3) / 4 / 2 / 24000) * 1000);
+  }
+
+  interrupt(): void {
+    this.ava.finish(false);
+  }
+
+  clear(): void {
+    this.ava.reset(this.idleText);
+    this.caller.reset();
+    this.freshReply = true;
+    this.visitorOpen = false;
+    this.partial = false;
+  }
+}
+
+/** Writes a bubble heading, shrinking it until it fits its box. */
+function setTitle(id: string, text: string, color: string, box: SceneBox): void {
+  const el = $(id);
+  Object.assign(el.style, { left: `${box.left}%`, top: `${box.top}%`, width: `${box.width}%`, height: `${box.height}%`, color });
+  el.textContent = text;
+  el.hidden = !text;
+  const fit = () => {
+    let f = 1;
+    el.style.setProperty("--fit", "1");
+    while (el.scrollWidth > el.clientWidth + 1 && f > 0.5) {
+      f = Math.round((f - 0.04) * 100) / 100;
+      el.style.setProperty("--fit", String(f));
+    }
+  };
+  fit();
+  // Fonts and the window size change the text's width.
+  void document.fonts?.ready.then(fit);
+  window.addEventListener("resize", fit);
+}
+
+/** Sets up the landscape scene: the picture, the bubbles' places, and the controls bar. */
+function showScene(scene: SceneConfig, names: { avaName: string; avatarName: string }): void {
+  document.body.classList.add("scene-mode");
+  const frame = $("scene-frame");
+  frame.style.setProperty("--scene-ar", String(scene.aspectRatio));
+  frame.style.setProperty("--bubble-font", String(scene.fontSize));
+  frame.style.setProperty("--ava-ink", scene.avaColor);
+  frame.style.setProperty("--caller-ink", scene.callerColor);
+  $<HTMLImageElement>("scene-image").src = scene.image;
+  const place = (id: string, box: SceneBox) =>
+    Object.assign($(id).style, {
+      left: `${box.left}%`,
+      top: `${box.top}%`,
+      width: `${box.width}%`,
+      height: `${box.height}%`,
+    });
+  place("ava-bubble", scene.avaBox);
+  place("caller-bubble", scene.callerBox);
+  frame.style.setProperty("--title-font", String(scene.titleSize));
+  const fill = (text: string) => text.replaceAll("{{avaName}}", names.avaName).replaceAll("{{avatarName}}", names.avatarName);
+  setTitle("ava-title", fill(scene.avaTitle), scene.avaTitleColor, scene.avaTitleBox);
+  setTitle("caller-title", fill(scene.callerTitle), scene.callerTitleColor, scene.callerTitleBox);
+  if (scene.mouth.enabled) {
+    place("scene-mouth", scene.mouth);
+    sceneMouth = scene.mouth;
+  }
+  if (scene.wave.enabled) {
+    place("scene-wave", scene.wave);
+    sceneWave = scene.wave;
+  }
+  frame.append($("panel"));
+  $("scene").hidden = false;
+}
+
+let transcript: TranscriptView = new Transcript();
 
 // ---- Sound wave --------------------------------------------------------
 
@@ -247,7 +532,149 @@ function drawWave(time: number): void {
       ctx.fillRect(i * bar + bar * 0.2, (height - h) / 2, bar * 0.6, h);
     });
   }
+  if (sceneWave) drawSceneWave(time, sceneWave);
+  if (sceneMouth) drawSceneMouth(time, sceneMouth);
   requestAnimationFrame(drawWave);
+}
+
+/** The robot's mouth in the image scene, when it has one. */
+let sceneMouth: SceneMouth | null = null;
+/** Smoothed loudness of AVA's voice for the mouth, 0..1. */
+let mouthLevel = 0;
+
+/** Sizes a canvas to its box on screen; returns false while it has no size. */
+function fitCanvas(canvas: HTMLCanvasElement): boolean {
+  const ratio = window.devicePixelRatio || 1;
+  const width = Math.round(canvas.clientWidth * ratio);
+  const height = Math.round(canvas.clientHeight * ratio);
+  if (!width || !height) return false;
+  if (canvas.width !== width || canvas.height !== height) {
+    canvas.width = width;
+    canvas.height = height;
+  }
+  return true;
+}
+
+/**
+ * Draws the robot's mouth: a recessed speaker slot with a row of light segments,
+ * like a real robot's display. It never changes shape; while AVA speaks its
+ * lights blink with each syllable of her voice, spreading from the center on
+ * louder sounds. At rest the segments glow faintly, like the eyes.
+ */
+function drawSceneMouth(time: number, config: SceneMouth): void {
+  const canvas = $<HTMLCanvasElement>("scene-mouth");
+  if (!fitCanvas(canvas)) return;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+  // Follow the voice closely, so the light blinks on each syllable and dims in
+  // the gaps between them, the way a mouth moves, instead of glowing steadily.
+  const target = Math.min(1, Math.max(0, (voiceLevel() * 6 - 0.15) * 1.4));
+  mouthLevel += (target - mouthLevel) * (target > mouthLevel ? 0.7 : 0.3);
+  const glow = mouthLevel;
+  const ratio = window.devicePixelRatio || 1;
+
+  const { width, height } = canvas;
+  ctx.clearRect(0, 0, width, height);
+  ctx.save();
+  ctx.translate(width / 2, height / 2);
+  const w = (config.size * width) / 2; // half the mouth's width
+  ctx.scale(w, w);
+
+  // The recessed slot: dark, with a lit lower rim and a shadowed upper edge.
+  const slotH = 0.42;
+  const slot = new Path2D();
+  slot.roundRect(-1, -slotH / 2, 2, slotH, slotH / 2);
+  const recess = ctx.createLinearGradient(0, -slotH / 2, 0, slotH / 2);
+  recess.addColorStop(0, "rgba(10, 3, 2, 0.95)");
+  recess.addColorStop(1, "rgba(40, 12, 6, 0.9)");
+  ctx.fillStyle = recess;
+  ctx.fill(slot);
+  const rim = ctx.createLinearGradient(0, -slotH / 2, 0, slotH / 2);
+  rim.addColorStop(0, "rgba(60, 10, 0, 0.7)");
+  rim.addColorStop(1, "rgba(255, 190, 150, 0.55)");
+  ctx.lineWidth = 0.045;
+  ctx.strokeStyle = rim;
+  ctx.stroke(slot);
+
+  // The light segments: the center ones light first, the outer ones join on louder sounds.
+  const count = 7;
+  const gap = 0.06;
+  const inner = 2 - 0.22; // the slot's width less its rounded ends
+  const segW = (inner - gap * (count - 1)) / count;
+  const segH = slotH * 0.62;
+  ctx.shadowColor = config.glowColor;
+  for (let i = 0; i < count; i++) {
+    const fromCenter = Math.abs(i - (count - 1) / 2) / ((count - 1) / 2); // 0 center, 1 ends
+    const reach = Math.min(1, Math.max(0, glow * 1.6 - fromCenter * 0.9));
+    const flicker = 0.88 + 0.12 * Math.sin(time / (55 + i * 9) + i * 2.1);
+    const light = 0.16 + 0.84 * reach * (glow > 0.02 ? flicker : 1);
+    ctx.shadowBlur = (2 + reach * 14) * ratio;
+    ctx.fillStyle = withAlpha(light > 0.6 ? config.color : config.glowColor, light);
+    ctx.beginPath();
+    ctx.roundRect(-inner / 2 + i * (segW + gap), -segH / 2, segW, segH, segH / 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+/** A #rrggbb color with an alpha, for gradients. */
+function withAlpha(hex: string, alpha: number): string {
+  const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex);
+  if (!m) return hex;
+  const [r, g, b] = m.slice(1).map((h) => parseInt(h, 16));
+  return `rgba(${r}, ${g}, ${b}, ${Math.max(0, Math.min(1, alpha)).toFixed(3)})`;
+}
+
+/** The image scene's wave, when it has one. */
+let sceneWave: SceneWave | null = null;
+/** Smoothed loudness driving the scene's wave, 0..1. */
+let sceneLevel = 0;
+
+/**
+ * Draws the scene's glowing bars: calm and barely breathing when nobody talks,
+ * jumping with the host's voice as it plays and with the visitor's microphone.
+ */
+function drawSceneWave(time: number, config: SceneWave): void {
+  const canvas = $<HTMLCanvasElement>("scene-wave");
+  const ratio = window.devicePixelRatio || 1;
+  const width = Math.round(canvas.clientWidth * ratio);
+  const height = Math.round(canvas.clientHeight * ratio);
+  if (!width || !height) return;
+  if (canvas.width !== width || canvas.height !== height) {
+    canvas.width = width;
+    canvas.height = height;
+  }
+  const state = document.body.dataset.state;
+  const voice = Math.min(1, voiceLevel() * 5);
+  const mic = state === "listening" ? Math.min(1, micLevel * 6) : 0;
+  const target = Math.max(voice, mic);
+  // Rise fast, fall slowly, so the bars read as speech rather than flicker.
+  sceneLevel += (target - sceneLevel) * (target > sceneLevel ? 0.45 : 0.12);
+
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+  ctx.clearRect(0, 0, width, height);
+  const n = config.bars.length;
+  const barWidth = config.barWidth * width;
+  const activity = Math.min(1, sceneLevel * 3);
+  ctx.fillStyle = config.color;
+  ctx.shadowColor = config.glowColor;
+  ctx.shadowBlur = barWidth * 2.2;
+  config.bars.forEach((rest, i) => {
+    const calm = 1 + 0.05 * Math.sin(time / 700 + i * 0.9);
+    // Each bar moves at its own pace, so the wave ripples instead of pumping as one block.
+    const wobble = 0.5 + 0.5 * Math.sin(time / (85 + i * 23) + i * 1.7) * Math.sin(time / (210 + i * 31));
+    const lively = 0.45 + sceneLevel * 1.5 * (0.55 + 0.75 * wobble);
+    const scale = calm * (1 - activity) + lively * activity;
+    const h = Math.min(height * 0.92, Math.max(barWidth, rest * height * scale));
+    const x = width / 2 + (i - (n - 1) / 2) * config.spacing * width - barWidth / 2;
+    const y = (height - h) / 2;
+    ctx.beginPath();
+    ctx.roundRect(x, y, barWidth, h, barWidth / 2);
+    // Twice for a stronger glow, like the light in the picture.
+    ctx.fill();
+    ctx.fill();
+  });
 }
 
 // ---- Header ------------------------------------------------------------
@@ -355,6 +782,8 @@ function reportError(message: string): void {
 const START_TIMEOUT_MS = 20000;
 
 async function startVisit(): Promise<void> {
+  // The image scene plays the voice in this page, which browsers only allow after a tap.
+  if (document.body.classList.contains("scene-mode")) unlockAudio();
   startButton.disabled = true;
   // The visit status line is hidden until the visit starts, so report on the start screen.
   attractStatus.textContent = "Starting…";
@@ -502,6 +931,11 @@ async function init(): Promise<void> {
   const showInfo = await (await fetch("/api/show")).json();
   document.title = `${(showInfo.screen as ScreenConfig).avaName} · ${showInfo.company}`;
   showHeader(showInfo.screen as ScreenConfig);
+  if (showInfo.renderer === "image") {
+    const scene = (showInfo.screen as ScreenConfig).scene;
+    showScene(scene, { avaName: (showInfo.screen as ScreenConfig).avaName, avatarName: showInfo.avatarName as string });
+    transcript = new BubbleTranscript(scene.idleText);
+  }
   $("attract-sub").textContent = `${showInfo.company}'s digital host. Tap to start a conversation.`;
   sandboxBadge.hidden = !showInfo.sandbox;
   prewarm = Boolean(showInfo.prewarm);

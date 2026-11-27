@@ -46,4 +46,13 @@ describe("kiosk screen settings", () => {
     const show = loadShow(showsDir, "demo");
     expect(show.screen).toMatchObject({ headline: "Meet AVA", accentText: "AVA", logoText: "GENESYS" });
   });
+
+  it("places the image scene's bubbles on the built-in picture unless the show moves them", () => {
+    const show = loadShow(tempShow(), "t");
+    expect(show.screen.scene).toMatchObject({ image: "", avaBox: { left: 18.4, top: 15 } });
+    const moved = loadShow(tempShow({ scene: { image: "booth.png", callerBox: { left: 60, top: 10, width: 30, height: 12 } } }), "t");
+    expect(moved.screen.scene.image).toBe("booth.png");
+    expect(moved.screen.scene.callerBox).toEqual({ left: 60, top: 10, width: 30, height: 12 });
+    expect(moved.screen.scene.avaBox.width).toBe(24.4);
+  });
 });

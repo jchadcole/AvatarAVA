@@ -13,6 +13,95 @@ const CannedLines = z.object({
   goodbye: z.string(),
 });
 
+/** A text box inside the scene picture, in percent of the picture's width and height. */
+const SceneBox = z.object({
+  left: z.number().min(0).max(100),
+  top: z.number().min(0).max(100),
+  width: z.number().min(1).max(100),
+  height: z.number().min(1).max(100),
+});
+
+/**
+ * The animated sound wave in the scene. Its box is in percent of the picture; bar
+ * heights are fractions of the box's height, and spacing and barWidth fractions of
+ * its width. The defaults sit on the wave in the built-in picture, whose own bars
+ * were painted out.
+ */
+const SceneWave = z.object({
+  /** false: no animated wave (use with a picture that keeps its own bars). */
+  enabled: z.boolean().default(true),
+  left: z.number().min(0).max(100).default(52.45),
+  top: z.number().min(0).max(100).default(59.26),
+  width: z.number().min(1).max(100).default(9.81),
+  height: z.number().min(1).max(100).default(20),
+  /** Resting height of each bar, left to right. */
+  bars: z.array(z.number().min(0).max(1)).min(1).default([0.088, 0.176, 0.333, 0.245, 0.495, 0.296, 0.269, 0.185, 0.088]),
+  spacing: z.number().positive().default(0.0936),
+  barWidth: z.number().positive().default(0.042),
+  color: z.string().default("#ffffff"),
+  glowColor: z.string().default("#4d9fff"),
+});
+
+/**
+ * The robot's mouth, drawn over the picture: a recessed speaker slot with a row
+ * of light segments that blink with each syllable while AVA speaks. Its box is in
+ * percent of the picture; the mouth is centered in it.
+ */
+const SceneMouth = z.object({
+  /** false: no mouth (use with a picture that already has one). */
+  enabled: z.boolean().default(true),
+  left: z.number().min(0).max(100).default(14.61),
+  top: z.number().min(0).max(100).default(51.39),
+  width: z.number().min(1).max(100).default(5.74),
+  height: z.number().min(1).max(100).default(6.94),
+  /** Mouth width as a share of the box's width (the rest leaves room for the glow). */
+  size: z.number().min(0.1).max(1).default(0.6),
+  /** The segments' light when lit, and the glow around them (and their color when dim). */
+  color: z.string().default("#fff4e6"),
+  glowColor: z.string().default("#ffd08a"),
+});
+
+/**
+ * The "image" renderer: one landscape picture, full screen, with the AVA's words
+ * typing into one speech bubble and the visitor's into another. The defaults fit
+ * the built-in picture (public/ava-scene.jpg, a robot, an agent and a caller).
+ */
+const SceneScreen = z.object({
+  /** The picture: "" for the built-in one, a file in shows/<show>/assets/, a path under public/ ("/..."), or an https URL. Bubbles must be empty. */
+  image: z.string().default(""),
+  /** Width / height of the picture, so the text boxes stay on the bubbles at any screen size. */
+  aspectRatio: z.number().positive().default(1916 / 1080),
+  /** The blank part of the AVA's bubble, where its words type out. */
+  avaBox: SceneBox.default({ left: 18.4, top: 15.0, width: 24.4, height: 20.2 }),
+  /** The blank part of the caller's bubble, where the visitor's words type out. */
+  callerBox: SceneBox.default({ left: 70.0, top: 16.3, width: 22.8, height: 9.2 }),
+  /** Largest text size in the bubbles, in percent of the picture's width; longer text shrinks to fit. */
+  fontSize: z.number().positive().default(1.75),
+  /** Text color in the AVA's bubble and in the caller's bubble. */
+  avaColor: z.string().default("#14213d"),
+  callerColor: z.string().default("#14213d"),
+  /**
+   * Headings at the top of the two bubbles, next to their icons. {{avaName}} is the
+   * screen's avaName and {{avatarName}} the show's avatarName, so each demo's
+   * show.json can name its own virtual agent.
+   */
+  avaTitle: z.string().default("{{avaName}} – Virtual Agent"),
+  callerTitle: z.string().default("Caller"),
+  /** Where the headings go, in percent of the picture (to the right of each bubble's icon). */
+  avaTitleBox: SceneBox.default({ left: 23.1, top: 10.4, width: 19.6, height: 3.7 }),
+  callerTitleBox: SceneBox.default({ left: 73.7, top: 10.8, width: 18.4, height: 4 }),
+  /** Heading size in percent of the picture's width; long names shrink to fit. */
+  titleSize: z.number().positive().default(1.95),
+  avaTitleColor: z.string().default("#0d1b4f"),
+  callerTitleColor: z.string().default("#0d1b4f"),
+  /** What the AVA's bubble says before a visit starts. "" leaves it empty. */
+  idleText: z.string().default("Hi! Tap Start and ask me anything."),
+  /** The glowing sound wave drawn over the picture, moving with the voice and the visitor's mic. */
+  wave: SceneWave.default(SceneWave.parse({})),
+  /** The robot's light mouth, which glows while AVA speaks. */
+  mouth: SceneMouth.default(SceneMouth.parse({})),
+});
+
 /** What the kiosk screen shows above the avatar. Text may use {{avatarName}}, {{company}} and {{eventName}}. */
 const KioskScreen = z.object({
   /** Big line at the top, e.g. "Meet {{avatarName}}". */
@@ -39,6 +128,8 @@ const KioskScreen = z.object({
   visitorName: z.string().default("You"),
   /** Smaller line under the headline. "" hides it. */
   subtitle: z.string().default(""),
+  /** The landscape picture used when the renderer is "image", and where its two speech bubbles are. */
+  scene: SceneScreen.default(SceneScreen.parse({})),
 });
 
 const ShowFile = z.object({
@@ -48,8 +139,12 @@ const ShowFile = z.object({
   avatarName: z.string(),
   /** LiveAvatar avatar for this show (from the LiveAvatar dashboard). Ignored in sandbox mode. */
   avatarId: z.string().optional(),
-  /** Which hosted face renders the host: "liveavatar" (default) or "anam". Both lip-sync to our own voice. */
-  renderer: z.enum(["liveavatar", "anam"]).default("liveavatar"),
+  /**
+   * Which face shows the host: "liveavatar" (default) or "anam", hosted faces that
+   * lip-sync to our own voice, or "image": no face, just the scene picture with the
+   * conversation typing into its speech bubbles (see screen.scene).
+   */
+  renderer: z.enum(["liveavatar", "anam", "image"]).default("liveavatar"),
   /** Anam avatar for this show (from the Anam Lab), used when renderer is "anam". */
   anamAvatarId: z.string().optional(),
   /** Deepgram Aura voice for the host, e.g. "aura-2-orpheus-en". Also the backup when ElevenLabs is on. */
@@ -210,8 +305,8 @@ export interface Env {
    * instant. Uses credits the whole time the page is open; never in sandbox.
    */
   liveAvatarPrewarm: boolean;
-  /** AVA_RENDERER: overrides the show's renderer ("liveavatar" or "anam"). */
-  renderer?: "liveavatar" | "anam";
+  /** AVA_RENDERER: overrides the show's renderer ("liveavatar", "anam" or "image"). */
+  renderer?: Renderer;
   anamApiKey?: string;
   /** ANAM_AVATAR_ID, an override for the show's anamAvatarId. */
   anamAvatarId?: string;
@@ -249,8 +344,8 @@ export function readEnv(env: NodeJS.ProcessEnv = process.env): Env {
     throw new Error(`AVA_BRAIN must be claude or genesys (got "${env.AVA_BRAIN}")`);
   }
   const renderer = env.AVA_RENDERER?.toLowerCase() || undefined;
-  if (renderer && renderer !== "liveavatar" && renderer !== "anam") {
-    throw new Error(`AVA_RENDERER must be liveavatar or anam (got "${env.AVA_RENDERER}")`);
+  if (renderer && !RENDERERS.includes(renderer as Renderer)) {
+    throw new Error(`AVA_RENDERER must be liveavatar, anam or image (got "${env.AVA_RENDERER}")`);
   }
   const sandbox = (env.LIVEAVATAR_SANDBOX ?? "true").toLowerCase() !== "false";
   return {
@@ -313,14 +408,17 @@ export function pickGenesys(env: Env, show: Pick<ShowConfig, "brain" | "genesys"
   return settings;
 }
 
-export type Renderer = "liveavatar" | "anam";
+export const RENDERERS = ["liveavatar", "anam", "image"] as const;
+export type Renderer = (typeof RENDERERS)[number];
 
-/** The face to use and its avatar. Environment variables win over show.json. */
+/** The face to use and its avatar ("" for the image scene). Environment variables win over show.json. */
 export function pickRenderer(
   env: Env,
   show: Pick<ShowConfig, "renderer" | "avatarId" | "anamAvatarId">,
 ): { renderer: Renderer; avatarId: string } {
   const renderer = env.renderer ?? show.renderer;
+  // The image scene has no face, so it needs no avatar service or key.
+  if (renderer === "image") return { renderer, avatarId: "" };
   if (renderer === "anam") {
     if (!env.anamApiKey) throw new Error("ANAM_API_KEY is required when the renderer is anam.");
     const avatarId = env.anamAvatarId || show.anamAvatarId;

@@ -43,6 +43,25 @@ const SceneWave = z.object({
 });
 
 /**
+ * The robot's mouth, drawn over the picture: a slightly open, human-shaped mouth
+ * made of light that glows brighter and shimmers while AVA speaks. Its box is in
+ * percent of the picture; the mouth is centered in it.
+ */
+const SceneMouth = z.object({
+  /** false: no mouth (use with a picture that already has one). */
+  enabled: z.boolean().default(true),
+  left: z.number().min(0).max(100).default(14.61),
+  top: z.number().min(0).max(100).default(51.39),
+  width: z.number().min(1).max(100).default(5.74),
+  height: z.number().min(1).max(100).default(6.94),
+  /** Mouth width as a share of the box's width (the rest leaves room for the glow). */
+  size: z.number().min(0.1).max(1).default(0.48),
+  /** The lips' light, and the glow that spreads from the mouth while AVA speaks. */
+  color: z.string().default("#fff4e6"),
+  glowColor: z.string().default("#ffd08a"),
+});
+
+/**
  * The "image" renderer: one landscape picture, full screen, with the AVA's words
  * typing into one speech bubble and the visitor's into another. The defaults fit
  * the built-in picture (public/ava-scene.jpg, a robot, an agent and a caller).
@@ -65,6 +84,8 @@ const SceneScreen = z.object({
   idleText: z.string().default("Hi! Tap Start and ask me anything."),
   /** The glowing sound wave drawn over the picture, moving with the voice and the visitor's mic. */
   wave: SceneWave.default(SceneWave.parse({})),
+  /** The robot's light mouth, which glows while AVA speaks. */
+  mouth: SceneMouth.default(SceneMouth.parse({})),
 });
 
 /** What the kiosk screen shows above the avatar. Text may use {{avatarName}}, {{company}} and {{eventName}}. */

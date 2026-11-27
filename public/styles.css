@@ -453,7 +453,8 @@ body.scene-mode #kiosk {
   object-fit: fill;
 }
 
-#scene-wave {
+#scene-wave,
+#scene-mouth {
   position: absolute;
   pointer-events: none;
 }

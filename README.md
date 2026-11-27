@@ -143,6 +143,8 @@ Use a landscape screen. The built-in picture is `public/ava-scene.jpg` (its bubb
 
 The glowing sound wave between the agent and the caller moves with the sound: it jumps with AVA's voice as it plays and with the visitor's microphone while they hold to talk, and rests calmly otherwise. The built-in picture has its own bars painted out so the animated ones replace them. With your own picture, set `"wave"` under `"scene"` (`left`, `top`, `width`, `height` in percent, resting `bars` heights, `spacing`, `barWidth`, `color`, `glowColor`), or `"wave": { "enabled": false }` to turn it off.
 
+The robot has a mouth drawn over the picture: human-shaped, slightly open, made of light. It never opens or closes; while AVA speaks, its light blinks with each syllable of the voice, and at rest it glows faintly. Move or resize it with `"mouth"` under `"scene"` (`left`, `top`, `width`, `height` in percent, `size`, `color`, `glowColor`), or turn it off with `"mouth": { "enabled": false }`.
+
 ## Licensing for shows
 
 Use a paid ElevenLabs plan for any show or recorded demo. Audio made on the free plan has no commercial rights, even after upgrading, so the server prints a `PLAN CHECK` warning at startup when the key is on the free plan. For a cloned presenter voice, get the presenter's written consent and use ElevenLabs' professional voice cloning on a plan that includes it.

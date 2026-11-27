@@ -55,6 +55,14 @@ interface SceneConfig {
   callerColor: string;
   idleText: string;
   wave: SceneWave;
+  mouth: SceneMouth;
+}
+
+interface SceneMouth extends SceneBox {
+  enabled: boolean;
+  size: number;
+  color: string;
+  glowColor: string;
 }
 
 interface SceneWave extends SceneBox {
@@ -445,6 +453,10 @@ function showScene(scene: SceneConfig): void {
     });
   place("ava-bubble", scene.avaBox);
   place("caller-bubble", scene.callerBox);
+  if (scene.mouth.enabled) {
+    place("scene-mouth", scene.mouth);
+    sceneMouth = scene.mouth;
+  }
   if (scene.wave.enabled) {
     place("scene-wave", scene.wave);
     sceneWave = scene.wave;
@@ -490,7 +502,108 @@ function drawWave(time: number): void {
     });
   }
   if (sceneWave) drawSceneWave(time, sceneWave);
+  if (sceneMouth) drawSceneMouth(time, sceneMouth);
   requestAnimationFrame(drawWave);
+}
+
+/** The robot's mouth in the image scene, when it has one. */
+let sceneMouth: SceneMouth | null = null;
+/** Smoothed loudness of AVA's voice for the mouth, 0..1. */
+let mouthLevel = 0;
+
+/** Sizes a canvas to its box on screen; returns false while it has no size. */
+function fitCanvas(canvas: HTMLCanvasElement): boolean {
+  const ratio = window.devicePixelRatio || 1;
+  const width = Math.round(canvas.clientWidth * ratio);
+  const height = Math.round(canvas.clientHeight * ratio);
+  if (!width || !height) return false;
+  if (canvas.width !== width || canvas.height !== height) {
+    canvas.width = width;
+    canvas.height = height;
+  }
+  return true;
+}
+
+/**
+ * Draws the robot's mouth: human-shaped, slightly open, made of light. It never
+ * opens or closes; while AVA speaks its light blinks with each syllable of her
+ * voice, with a soft shimmer along the lips. At rest it glows faintly, like the eyes.
+ */
+function drawSceneMouth(time: number, config: SceneMouth): void {
+  const canvas = $<HTMLCanvasElement>("scene-mouth");
+  if (!fitCanvas(canvas)) return;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+  // Follow the voice closely, so the light blinks on each syllable and dims in
+  // the gaps between them, the way a mouth moves, instead of glowing steadily.
+  const target = Math.min(1, Math.max(0, (voiceLevel() * 6 - 0.15) * 1.4));
+  mouthLevel += (target - mouthLevel) * (target > mouthLevel ? 0.7 : 0.3);
+  const glow = mouthLevel;
+
+  const { width, height } = canvas;
+  ctx.clearRect(0, 0, width, height);
+  ctx.save();
+  ctx.translate(width / 2, height / 2);
+  const w = (config.size * width) / 2; // half the mouth's width
+  ctx.scale(w, w);
+
+  // Shapes in units of half the mouth's width, centered on the mouth.
+  const outer = new Path2D();
+  outer.moveTo(-1, 0);
+  outer.bezierCurveTo(-0.7, -0.18, -0.4, -0.36, -0.18, -0.3); // upper lip, left
+  outer.quadraticCurveTo(-0.06, -0.26, 0, -0.2); // cupid's bow
+  outer.quadraticCurveTo(0.06, -0.26, 0.18, -0.3);
+  outer.bezierCurveTo(0.4, -0.36, 0.7, -0.18, 1, 0); // upper lip, right
+  outer.bezierCurveTo(0.7, 0.42, 0.35, 0.52, 0, 0.52); // lower lip
+  outer.bezierCurveTo(-0.35, 0.52, -0.7, 0.42, -1, 0);
+  outer.closePath();
+
+  // The opening between the lips: just parted.
+  const opening = new Path2D();
+  opening.moveTo(-0.86, 0.02);
+  opening.bezierCurveTo(-0.5, -0.06, -0.2, -0.04, 0, -0.02);
+  opening.bezierCurveTo(0.2, -0.04, 0.5, -0.06, 0.86, 0.02);
+  opening.bezierCurveTo(0.5, 0.16, 0.2, 0.2, 0, 0.2);
+  opening.bezierCurveTo(-0.2, 0.2, -0.5, 0.16, -0.86, 0.02);
+  opening.closePath();
+
+  // Lips: a dark glossy shape, lit from within more as AVA speaks.
+  ctx.shadowColor = config.glowColor;
+  ctx.shadowBlur = (4 + glow * 22) * (window.devicePixelRatio || 1);
+  ctx.fillStyle = "rgba(28, 8, 4, 0.82)";
+  ctx.fill(outer);
+
+  // The lips' outline, in light, with a shimmer that drifts along it while she speaks.
+  const shimmer = ctx.createLinearGradient(-1, 0, 1, 0);
+  const at = (Math.sin(time / 420) + 1) / 2;
+  const base = 0.2 + glow * 0.8;
+  shimmer.addColorStop(0, withAlpha(config.color, base * 0.6));
+  shimmer.addColorStop(Math.max(0, at - 0.25), withAlpha(config.color, base));
+  shimmer.addColorStop(at, withAlpha(config.color, Math.min(1, base + glow * 0.5)));
+  shimmer.addColorStop(Math.min(1, at + 0.25), withAlpha(config.color, base));
+  shimmer.addColorStop(1, withAlpha(config.color, base * 0.6));
+  ctx.lineWidth = 0.05;
+  ctx.strokeStyle = shimmer;
+  ctx.stroke(outer);
+
+  // The opening emits the light: faint at rest, swelling and flickering softly with her voice.
+  const flicker = 1 + 0.12 * Math.sin(time / 70) * Math.sin(time / 190) * glow;
+  const inner = ctx.createRadialGradient(0, 0.08, 0, 0, 0.08, 0.9);
+  inner.addColorStop(0, withAlpha(config.color, Math.min(1, (0.25 + glow * 0.75) * flicker)));
+  inner.addColorStop(0.6, withAlpha(config.glowColor, Math.min(1, (0.15 + glow * 0.75) * flicker)));
+  inner.addColorStop(1, withAlpha(config.glowColor, 0.08 + glow * 0.5));
+  ctx.shadowBlur = (2 + glow * 30) * (window.devicePixelRatio || 1);
+  ctx.fillStyle = inner;
+  ctx.fill(opening);
+  ctx.restore();
+}
+
+/** A #rrggbb color with an alpha, for gradients. */
+function withAlpha(hex: string, alpha: number): string {
+  const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex);
+  if (!m) return hex;
+  const [r, g, b] = m.slice(1).map((h) => parseInt(h, 16));
+  return `rgba(${r}, ${g}, ${b}, ${Math.max(0, Math.min(1, alpha)).toFixed(3)})`;
 }
 
 /** The image scene's wave, when it has one. */

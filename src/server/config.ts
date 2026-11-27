@@ -67,11 +67,7 @@ const SceneMouth = z.object({
  * the built-in picture (public/ava-scene.jpg, a robot, an agent and a caller).
  */
 const SceneScreen = z.object({
-  /**
-   * The picture: "" for the built-in one (the caller side shows a group of people),
-   * "/ava-scene-original.jpg" for the first version with a single male caller, a file
-   * in shows/<show>/assets/, or an https URL. Bubbles must be empty.
-   */
+  /** The picture: "" for the built-in one, a file in shows/<show>/assets/, a path under public/ ("/..."), or an https URL. Bubbles must be empty. */
   image: z.string().default(""),
   /** Width / height of the picture, so the text boxes stay on the bubbles at any screen size. */
   aspectRatio: z.number().positive().default(1916 / 1080),
